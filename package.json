@@ -1,0 +1,25 @@
+{
+  "name": "quick-uploader-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.20.0",
+    "bull": "^3.18.0",
+    "compression": "^1.7.4",
+    "dotenv": "^8.2.0",
+    "event-stream": "^4.0.1",
+    "express": "^4.17.1",
+    "googleapis": "^59.0.0",
+    "mongoose": "^5.10.0",
+    "node-telegram-bot-api": "^0.50.0",
+    "request-progress": "^3.0.0"
+  }
+}
