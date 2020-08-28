@@ -19,7 +19,7 @@ const { OAuth2Client } = require('google-auth-library');
 fs.mkdirSync(dir, { recursive: true });
 
 const bot = new TelegramBot(
-  process.env.TOKEN || "1299628330:AAH8tTfezPEcK2Vq8jpuILLJQ0Zx66UKuWA",
+  process.env.TOKEN,
   {
     polling: true,
   }
@@ -99,11 +99,11 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   current_job_id = job.id; 
 
   const oAuth2Client = new OAuth2Client(
-    process.env.ClientID ||
-      "553522035261-0lv9ae8dvlonr3392qipht9mng0kgoa9.apps.googleusercontent.com",
-    process.env.Client_Secret || "CGKT0YYFlqqwNfWWU_R5iWYd",
-    process.env.redirect_uri || "urn:ietf:wg:oauth:2.0:oob"
+    process.env.CLIENT_ID,
+    process.env.CLIENT_SECRET,
+    process.env.REDIRECT_URI
   );
+
   oAuth2Client.setCredentials(job.data.credentials);
   const writer = fs.createWriteStream("./shared/" + job.data.filename);
   progress(request(job.data.url))
@@ -253,10 +253,9 @@ bot.onText(/\/echo (.+)/, (msg, match) => {
 bot.on("message", async (msg) => {
   try {
     const oAuth2Client = new OAuth2Client(
-      process.env.ClientID ||
-        "553522035261-0lv9ae8dvlonr3392qipht9mng0kgoa9.apps.googleusercontent.com",
-      process.env.Client_Secret || "CGKT0YYFlqqwNfWWU_R5iWYd",
-      process.env.redirect_uri || "urn:ietf:wg:oauth:2.0:oob"
+      process.env.CLIENT_ID,
+      process.env.CLIENT_SECRET,
+      process.env.REDIRECT_URI
     );
     const chatId = msg.chat.id;
     // console.log(msg)
@@ -460,10 +459,9 @@ bot.on("callback_query", async (query) => {
   const [data, action] = query.data.split(" ");
 
   const oAuth2Client = new OAuth2Client(
-    process.env.ClientID ||
-      "553522035261-0lv9ae8dvlonr3392qipht9mng0kgoa9.apps.googleusercontent.com",
-    process.env.Client_Secret || "CGKT0YYFlqqwNfWWU_R5iWYd",
-    process.env.redirect_uri || "urn:ietf:wg:oauth:2.0:oob"
+    process.env.CLIENT_ID,
+    process.env.CLIENT_SECRET,
+    process.env.REDIRECT_URI
   );
   // console.log(query)
 
