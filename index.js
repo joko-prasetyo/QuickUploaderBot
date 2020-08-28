@@ -76,6 +76,15 @@ Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(job.data.filesize)}
       if (err) {
         done(new Error("Upload failed!"))
       } else {
+        fs.readdir(dir, (err, files) => {
+          if (err) throw err;
+          for (const file of files) {
+            fs.unlink(path.join(dir, file), (err) => {
+              if (err) throw err;
+            });
+          }
+        });
+        
         done(null, {
           message: `
 **Upload completed!**
@@ -124,7 +133,7 @@ ETA: ${state.time.remaining}s`,
         // console.log("progress", state);
     })
     .on("error", function (err) {
-        console.log(err)
+        console.log(err, "Something went wrong!")
         // Delete all file in shared folder
         fs.readdir(dir, (err, files) => {
           if (err) throw err;
@@ -175,15 +184,6 @@ uploadFileQueue.on("global:completed", (jobId, data) => {
     }),
     parse_mode: "Markdown"
   })
-
-  fs.readdir(dir, (err, files) => {
-    if (err) throw err;
-    for (const file of files) {
-      fs.unlink(path.join(dir, file), (err) => {
-        if (err) throw err;
-      });
-    }
-  });
 });
 
 uploadFileQueue.on("global:failed", async (jobId, data) => {
