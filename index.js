@@ -16,6 +16,8 @@ const path = require("path");
 const dir = "./shared";
 const { OAuth2Client } = require('google-auth-library');
 
+const PORT = process.env.PORT || 3000
+
 fs.mkdirSync(dir, { recursive: true });
 
 const bot = new TelegramBot(
@@ -25,12 +27,9 @@ const bot = new TelegramBot(
   }
 );
 
-const uploadFileQueue = new Queue('uploadFile', { 
-  redis: {
-    host: '127.0.0.1',
-    port: 6379
-  }
-});
+let REDIS_URL = process.env.REDIS_URL || "redis://0.0.0.0:6379";
+
+const uploadFileQueue = new Queue('uploadFile', REDIS_URL);
 
 function uploadFile(auth, filename, folderId, { job, done }) {
   return new Promise((resolve, reject) => {
@@ -543,3 +542,5 @@ You can always bind your account to our bot by using /auth
     
   }
 });
+
+server.listen(PORT, () => console.log("Listening on PORT", PORT));
