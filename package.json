@@ -4,22 +4,29 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "db": "D:/MongoDB/bin/mongod.exe -dbpath=D:/MongoDB/mongo-database",
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "redis-server": "C:/Redis/redis-server.exe"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.20.0",
     "bull": "^3.18.0",
     "compression": "^1.7.4",
     "dotenv": "^8.2.0",
     "event-stream": "^4.0.1",
     "express": "^4.17.1",
+    "filenamify-url": "^2.1.1",
+    "filesize": "^6.1.0",
+    "google-auth-library": "^6.0.6",
     "googleapis": "^59.0.0",
+    "is-url": "^1.2.4",
     "mongoose": "^5.10.0",
+    "node-fetch": "^2.6.0",
     "node-telegram-bot-api": "^0.50.0",
+    "remote-file-size": "^3.0.5",
     "request-progress": "^3.0.0"
   }
 }
