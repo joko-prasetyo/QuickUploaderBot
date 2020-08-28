@@ -26,8 +26,9 @@ const bot = new TelegramBot(
     polling: true,
   }
 );
+const users = {}
 
-let REDIS_URL = process.env.REDIS_URL || "redis://0.0.0.0:6379";
+let REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 const uploadFileQueue = new Queue('uploadFile', REDIS_URL);
 
@@ -95,7 +96,6 @@ Thank you for using @QuickUploaderBot
           message_id: job.data.message_id,
           chat_id: job.data.chatId
         })
-        console.log('File Id: ', file.id);
       }
     });
   })
@@ -116,7 +116,6 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   const writer = fs.createWriteStream("./shared/" + job.data.filename);
   progress(request(job.data.url))
     .on("progress", function (state) {
-        job.data.filesize = state.size.total;
         job.progress({
           message: `
 Download Progress: ${(state.percent * 100).toFixed(2)}% 
@@ -234,8 +233,6 @@ function sendListFiles(auth, chat, fileId = 'root', isEdit = false) {
   });
 }
 
-const users = {}
-
 bot.onText(/\/echo (.+)/, (msg, match) => {
   // 'msg' is the received Message from Telegram
   // 'match' is the result of executing the regexp above on the text content
@@ -305,13 +302,12 @@ Use /auth command to authenticate your account!
         return bot.sendMessage(chatId, "It seems you haven't authenticate your google account, please type /auth to do that")
       }
       const url = msg.text.split(" ").join("").replace("/upload", "");
-      console.log(url)
       if (!isUrl(url)) {
         return bot.sendMessage(chatId, "Invalid url, please try again!")
       }
       remote(url, async (err, fileSize) => {
         console.log(fileSize);
-        const limit = 5368709120;
+        const limit = 107374182400;
         if (fileSize <= limit) {
           const filename = url.split('/').pop().split('#')[0].split('?')[0];
           await bot.sendMessage(chatId, `
@@ -345,7 +341,7 @@ File Size: ${filesize(fileSize)}
             }
           })
         } else 
-          bot.sendMessage(chatId, "Failed to upload, the file you wanted to upload was too big! Please choose file with size lesser than 5GB");
+          bot.sendMessage(chatId, "Failed to upload, the file you wanted to upload was too big! Please choose file with size lesser than 100GB");
       });
     }
     else if (msg.text.toLowerCase() === "/auth") {
@@ -494,7 +490,7 @@ await bot.sendMessage(id, `
 To upload file please type  /upload <url-file> 
 
 For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" + 
-` The Link should be ended with extention file for example .zip, .rar, .apk, .exe and make sure that the file size is not too large with maximum of 5GB`, 
+` The Link should be ended with extention file for example .zip, .rar, .apk, .exe and make sure that the file size is not too large with maximum of 100GB`, 
 
 { parse_mode: "Markdown" })
   }
@@ -508,6 +504,7 @@ For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
       chatId: id,
       url: users[id].upload_info.url,
       filename: users[id].upload_info.filename,
+      filesize: users[id].upload_info.filesize,
       credentials: users[id].tokens[0],
       current_folder_id: users[id].current_folder_id
     })
@@ -539,7 +536,7 @@ You can always bind your account to our bot by using /auth
 })
     users[id].tokens = [];
   } else if (action === "check-queue") {
-    
+    console.log("asdasd")
   }
 });
 
