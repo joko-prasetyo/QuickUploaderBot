@@ -101,7 +101,7 @@ Thank you for using @QuickUploaderBot
   })
 }
 
-const MAXIMUM_CONCURRENCY_WORKER = 5
+const MAXIMUM_CONCURRENCY_WORKER = 1
 let current_job_id;
 uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   current_job_id = job.id; 
