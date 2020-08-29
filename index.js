@@ -3,11 +3,11 @@ require("./src/db/mongoose");
 const server = require("express")();
 const fs = require("fs");
 const Queue = require("bull");
-const remote = require('remote-file-size');
 const filesize = require("filesize");
 const TelegramBot = require("node-telegram-bot-api");
 const { google } = require("googleapis");
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
+const mime = require('mime-types');
 const isUrl = require("is-url");
 const User = require("./src/models/user");
 const request = require("request");
@@ -15,7 +15,7 @@ const progress = require("request-progress");
 const path = require("path");
 const dir = "./shared";
 const { OAuth2Client } = require('google-auth-library');
-
+const e = require("express");
 const PORT = process.env.PORT || 3000
 
 fs.mkdirSync(dir, { recursive: true });
@@ -128,7 +128,6 @@ ETA: ${state.time.remaining}s`,
           message_id: job.data.message_id,
           chat_id: job.data.chatId
         })
-        // console.log("progress", state);
     })
     .on("error", function (err) {
         console.log(err, "Something went wrong!")
@@ -305,11 +304,13 @@ Use /auth command to authenticate your account!
       if (!isUrl(url)) {
         return bot.sendMessage(chatId, "Invalid url, please try again!")
       }
-      remote(url, async (err, fileSize) => {
-        console.log(fileSize);
+      request({ url, method: "HEAD" }, async (err, response, body) => {
+        const fileSize = response.headers["content-length"];
+        const extension = mime.extension(response.headers["content-type"]);
+        if (err) return bot.sendMessage(chatId, "URL might be broken! Please try again later.")
         const limit = 107374182400;
         if (fileSize <= limit) {
-          const filename = url.split('/').pop().split('#')[0].split('?')[0];
+          const filename = url.split('/').pop().split('#')[0].split('?')[0] + `.${extension}`;
           await bot.sendMessage(chatId, `
 Well done! Your file is ready!
 
@@ -507,22 +508,22 @@ For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
       filesize: users[id].upload_info.filesize,
       credentials: users[id].tokens[0],
       current_folder_id: users[id].current_folder_id
-    })
-    bot.editMessageText("Your file has been added to the queue, You will be notified when it's your turn!", {
-      reply_markup: JSON.stringify({
-        inline_keyboard: [
-          [
-            {
-              text: "Check Queue",
-              callback_data: " check-queue"
-            }
+    }, { removeOnFail: true, removeOnComplete: true }).then((job) => {
+      bot.editMessageText("Your file has been added to the queue, You will be notified when it's your turn!", {
+        reply_markup: JSON.stringify({
+          inline_keyboard: [
+            [
+              {
+                text: "Check Queue",
+                callback_data: `${job.id} check-queue`
+              }
+            ],
           ],
-        ],
-      }),
-      message_id,
-      chat_id: id
+        }),
+        message_id,
+        chat_id: id
+      })
     })
-    uploadFileQueue.get
   } else if (action === "revokeall") {
     await User.findOneAndUpdate({ telegram_user_id: id }, { $set: { tokens: [] } });
     bot.editMessageText(`
@@ -536,7 +537,33 @@ You can always bind your account to our bot by using /auth
 })
     users[id].tokens = [];
   } else if (action === "check-queue") {
-    console.log("asdasd")
+    let activeJobs = await uploadFileQueue.getActive();
+    const waitingJobsCount = await uploadFileQueue.getWaitingCount() 
+    activeJobs =  activeJobs.map(job => { 
+      return {
+        id: job.id,
+        processedOn: new Date(job.processedOn)
+      } 
+    })
+
+    let activeJobInfoStr = "Currently this bot is serving queues number: ";
+    activeJobs.forEach((job, index) => {
+      if (index === activeJobs.length - 1)
+        activeJobInfoStr += `${job.id}`
+      else   
+        activeJobInfoStr += `${job.id}, `
+    })
+    bot.answerCallbackQuery({
+      callback_query_id: query.id,
+      text: 
+      `
+This file is on queue number ${data}
+${activeJobInfoStr}
+
+There're currently ${waitingJobsCount} file(s) are waiting to be uploaded
+      `,
+      show_alert: true
+    })
   }
 });
 
