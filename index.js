@@ -15,7 +15,7 @@ const progress = require("request-progress");
 const path = require("path");
 const dir = "./shared";
 const { OAuth2Client } = require('google-auth-library');
-const e = require("express");
+const { chat } = require("googleapis/build/src/apis/chat");
 const PORT = process.env.PORT || 3000
 
 fs.mkdirSync(dir, { recursive: true });
@@ -39,7 +39,6 @@ function uploadFile(auth, filename, folderId, { job, done }) {
       'name': filename,
       parents: [job.data.current_folder_id]
     };
-    // console.log(fileMetadata);
     let isTrigerred = false;
     const media = {
       mimeType: "application/octet-stream",
@@ -48,7 +47,7 @@ function uploadFile(auth, filename, folderId, { job, done }) {
     };
     const req = drive.files.create({
       resource: fileMetadata,
-      media: media,
+      media,
       fields: 'id'
     }, {
       onUploadProgress(e) {
@@ -98,6 +97,61 @@ Thank you for using @QuickUploaderBot
         })
       }
     });
+  })
+}
+
+function renameFolderOrFile(auth, folder_or_file, chat_id) {
+  const drive = google.drive({ version: 'v3', auth });
+  drive.files.update({
+    auth,
+    fileId: folder_or_file.id,
+    resource: {
+      name: folder_or_file.name
+    }
+  }, (err, file) => {
+    if (err) return bot.sendMessage(chat_id, "Something went wrong!");
+    bot.sendMessage(chat_id, "Renamed Successfully!", {
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "🔙 Back to Main Directory", callback_data: "root folder" }], [{ text: "❌ Close", callback_data: " cancel" }]]
+      }),
+    })
+  })
+}
+
+function deleteFolderOrFile(auth, folder_or_file_id, chat_id, message_id) {
+  const drive = google.drive({ version: 'v3', auth });
+  drive.files.delete({
+    auth,
+    fileId: folder_or_file_id,
+    fields: 'id'
+  }, (err, file) => {
+    if (err) return bot.sendMessage(chat_id, "Something went wrong!");
+    bot.editMessageText("Deleted Successfully!", {
+      message_id,
+      chat_id,
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "🔙 Back to Main Directory", callback_data: "root folder" }], [{ text: "❌ Close", callback_data: " cancel" }]]
+      }),
+    })
+  })
+}
+
+function insertFolder(auth, folder, chat_id, message_id) {
+  const drive = google.drive({ version: 'v3', auth });
+  drive.files.create({
+    resource: {
+      parents: [folder.id],
+      mimeType: 'application/vnd.google-apps.folder',
+      name: folder.name
+    },
+    auth
+  }, (err, file) => {
+    if (err) return bot.sendMessage(chat_id, "Something went wrong!");
+    bot.sendMessage(chat_id, "Folder Created!", {
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: `Go to '${folder.name}' folder`, callback_data: `${file.data.id} folder` }], [{ text: "🔙 Back to Main Directory", callback_data: "root folder" }], [{ text: "❌ Close", callback_data: " cancel" }]]
+      }),
+    })
   })
 }
 
@@ -207,14 +261,14 @@ function sendListFiles(auth, chat, fileId = 'root', isEdit = false) {
     if (err) return console.log('The API returned an error: ' + err);
     const files = res.data.files;
     if (files.length) {
-      console.log('Files:');
-      files.map((file) => {
-        console.log(`${file.name} (${file.id})`);
-      });
+      // console.log('Files:');
+      // files.map((file) => {
+      //   console.log(`${file.name} (${file.id})`);
+      // });
       const reply_markup = JSON.stringify({
         inline_keyboard: fileId !== 'root' ?
-        [[{ text: "⚙️ Folder Settings", callback_data: ` settings` }], ...files.map((file, index) => [{ text: `${file.size ? '📎' : '📁'} `+ file.name + ` ${file.size ? '(' + filesize(file.size) + ')': ''}`, callback_data: `${file.id} select`  }]), [{ text: "📤 Upload here!", callback_data: `${fileId} upload` }], [{ text: "<- Back to Main Directory", callback_data: "root select" }], [{ text: "❌ Close", callback_data: " cancel" }]]
-        : [...files.map((file, index) => [{ text: `${file.size ? '📎' : '📁'} `+ file.name + ` ${file.size ? '(' + filesize(file.size) + ')': ''}`, callback_data: `${file.id} select`  }]), [{ text: "📤 Upload here!", callback_data: `${fileId} upload` }], [{ text: "❌ Close", callback_data: " cancel" }]]
+        [[{ text: "⚙️ Folder Settings", callback_data: `${fileId} settings` }], ...files.map((file, index) => [{ text: `${file.size ? '📎' : '📁'} `+ file.name + ` ${file.size ? '(' + filesize(file.size) + ')': ''}`, callback_data: `${file.size ? file.id + " file": file.id + " folder"}`  }]), [{ text: "📤 Upload here!", callback_data: `${fileId} upload` }], [{ text: "🔙 Back to Main Directory", callback_data: "root folder" }], [{ text: "❌ Close", callback_data: " cancel" }]]
+        : [[{ text: "⚙️ Folder Settings", callback_data: `${fileId} settings` }], ...files.map((file, index) => [{ text: `${file.size ? '📎' : '📁'} `+ file.name + ` ${file.size ? '(' + filesize(file.size) + ')': ''}`, callback_data: `${file.size ? file.id + " file": file.id + " folder"}`}]), [{ text: "📤 Upload here!", callback_data: `${fileId} upload` }], [{ text: "❌ Close", callback_data: " cancel" }]]
       })
       isEdit ?  
       bot.editMessageText("Choose your file/folder to manage!", {
@@ -227,7 +281,15 @@ function sendListFiles(auth, chat, fileId = 'root', isEdit = false) {
       })
     } else {
       console.log('No files found.');
-      bot.sendMessage(chat.id, "No files found.")
+      bot.editMessageText("Choose your file/folder to manage!", {
+        message_id: chat.message_id,
+        chat_id: chat.id,
+        reply_markup: JSON.stringify({
+          inline_keyboard: fileId !== 'root' ?
+          [[{ text: "⚙️ Folder Settings", callback_data: `${fileId} settings` }], [{ text: "📤 Upload here!", callback_data: `${fileId} upload` }], [{ text: "🔙 Back to Main Directory", callback_data: "root folder" }], [{ text: "❌ Close", callback_data: " cancel" }]]
+          : [[{ text: "⚙️ Folder Settings", callback_data: `${fileId} settings` }], [{ text: "📤 Upload here!", callback_data: `${fileId} upload` }], [{ text: "❌ Close", callback_data: " cancel" }]]
+        })
+      })
     }
   });
 }
@@ -253,8 +315,9 @@ bot.on("message", async (msg) => {
       process.env.REDIRECT_URI
     );
     const chatId = msg.chat.id;
+    const user_id = msg.from.id;
     // console.log(msg)
-    const user = await User.findOne({ telegram_user_id: msg.from.id });
+    const user = await User.findOne({ telegram_user_id: user_id });
     if (user) {
       users[chatId] = {
         ...users[chatId],
@@ -264,10 +327,10 @@ bot.on("message", async (msg) => {
     }
     if (msg.text.toLowerCase() === "/start") {
       if (!user) {
-        const newUser = new User({ telegram_user_id: msg.from.id, username: msg.from.username })
+        const newUser = new User({ telegram_user_id: user_id, username: msg.from.username })
         await newUser.save();
       }
-      users[msg.from.id] = {};
+      users[user_id] = {};
       return bot.sendMessage(
         chatId,
         `
@@ -281,21 +344,35 @@ Use /auth command to authenticate your account!
 `
       );
     }
-     else if (users[msg.from.id] && users[msg.from.id].onAuth) {
+     else if (users[user_id] && users[user_id].onAuth) {
       oAuth2Client.getToken(msg.text, async (err, token) => {
         if (err) {
           bot.sendMessage(chatId, "Invalid token, please try again! To cancel this action please click the cancel button!");
         } else {
           oAuth2Client.setCredentials(token);
           // Store the token to disk for later program executions
-          await User.findOneAndUpdate({ telegram_user_id: msg.from.id }, { $push: { "tokens": token } });
+          await User.findOneAndUpdate({ telegram_user_id: user_id }, { $push: { "tokens": token } });
           bot.sendMessage(chatId, "Authorized successfully");
-          users[msg.from.id] = {
-            ...users[msg.from.id],
+          users[user_id] = {
+            ...users[user_id],
             onAuth: false
           }
         }
       });
+    } else if (users[user_id] && users[user_id].onUpdateFile) {
+      oAuth2Client.setCredentials(user.tokens[0]);
+      bot.deleteMessage(chatId, users[user_id].last_message_id);
+      renameFolderOrFile(oAuth2Client, { id: users[user_id].choosen_parent_folder, name: msg.text }, chatId, users[user_id].last_message_id);
+      delete users[user_id].onUpdateFile;
+      delete users[user_id].last_message_id;
+      delete users[user_id].choosen_parent_folder;
+    } else if (users[user_id] && users[user_id].onCreateFile) {
+      oAuth2Client.setCredentials(user.tokens[0]);
+      bot.deleteMessage(chatId, users[user_id].last_message_id);
+      insertFolder(oAuth2Client, { name: msg.text, id: users[user_id].choosen_parent_folder }, chatId);
+      delete users[user_id].onCreateFile;
+      delete users[user_id].choosen_parent_folder;
+      delete users[user_id].last_message_id;
     } else if (msg.text.includes("/upload")) {
       if (!user.tokens.length) {
         return bot.sendMessage(chatId, "It seems you haven't authenticate your google account, please type /auth to do that")
@@ -310,7 +387,7 @@ Use /auth command to authenticate your account!
         if (err) return bot.sendMessage(chatId, "URL might be broken! Please try again later.")
         const limit = 107374182400;
         if (fileSize <= limit) {
-          const filename = url.split('/').pop().split('#')[0].split('?')[0] + `.${extension}`;
+          const filename = url.split('/').pop().split('#')[0].split('?')[0].replace(extension, "") + `.${extension}`;
           await bot.sendMessage(chatId, `
 Well done! Your file is ready!
 
@@ -332,8 +409,8 @@ File Size: ${filesize(fileSize)}
               ],
             }),
           }).then((data) => {
-            users[msg.from.id] = {
-              ...users[msg.from.id],
+            users[user_id] = {
+              ...users[user_id],
               upload_info: {
                 url,
                 filename,
@@ -378,8 +455,8 @@ To Authorize your google account follow step by step below:
 `,
         options
       );
-      users[msg.from.id] = {
-        ...users[msg.from.id],
+      users[user_id] = {
+        ...users[user_id],
         onAuth: true
       }
     } 
@@ -388,7 +465,7 @@ To Authorize your google account follow step by step below:
         return bot.sendMessage(chatId, "It seems you haven't authenticate your google account, please type /auth to do that")
       }
       oAuth2Client.setCredentials(user.tokens[0]);
-      sendListFiles(oAuth2Client, { id: msg.from.id });
+      sendListFiles(oAuth2Client, { id: user_id });
     } else if (msg.text.toLowerCase() === "/mydrive") {
       bot.sendMessage(chatId, "Choose Your Drive to Manage");
     } else if (msg.text.toLowerCase() === "/myprofile") {
@@ -448,6 +525,13 @@ Please type '/' to see all available command!
   }
 });
 
+
+/* 
+  CALLBACK QUERY 
+  =====================================================================================================
+  =====================================================================================================
+*/
+
 bot.on("callback_query", async (query) => {
   const id = query.from.id;
   const message_id = query.message.message_id;
@@ -469,7 +553,6 @@ bot.on("callback_query", async (query) => {
       tokens: user.tokens,
       current_folder_id: user.current_folder_id || "root"
     }
-    console.log(JSON.stringify(users[id]))
   }
 
   if (action === "cancel") {
@@ -478,7 +561,8 @@ bot.on("callback_query", async (query) => {
       onAuth: false
     }
     bot.deleteMessage(id, message_id)
-
+    users[id].onAuth = false;
+    users[id].onCreateFile = false;
   } 
   else if (action === "upload") {
     await User.findOneAndUpdate({ telegram_user_id: id }, { $set: { current_folder_id: data } });
@@ -494,11 +578,105 @@ For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
 ` The Link should be ended with extention file for example .zip, .rar, .apk, .exe and make sure that the file size is not too large with maximum of 100GB`, 
 
 { parse_mode: "Markdown" })
-  }
-  else if (action === "select") {
-    console.log(users[id].tokens[0])
+  } else if (action === "folder") {
     oAuth2Client.setCredentials(users[id].tokens[0])
     sendListFiles(oAuth2Client, chat, data, true);
+  } else if (action === "file") {
+    bot.editMessageText("What do you want to do with this file ?", {
+      reply_markup: JSON.stringify({
+        inline_keyboard: [
+          [
+            {
+              text: "✏️ Rename File",
+              callback_data: `${data} edit`
+            },
+            {
+              text: "❌ Delete File",
+              callback_data: `${data} delete-file`
+            }
+          ],
+          [
+            {
+              text: "🔙 Back to Main Directory",
+              callback_data: `root folder`
+            }
+          ],
+        ],
+      }),
+      message_id,
+      chat_id: id
+    })
+  } else if (action === "settings") {
+    bot.editMessageText("What do you want to do with this folder ?", {
+      reply_markup: JSON.stringify({
+        inline_keyboard: [
+          [
+            {
+              text: "✏️ Rename Folder",
+              callback_data: `${data} edit`
+            },
+            {
+              text: "❌ Delete Folder",
+              callback_data: `${data} delete-folder`
+            }
+          ],
+          [
+            {
+              text: "➕ Create Folder",
+              callback_data: `${data} create`
+            },
+            {
+              text: "🔙 Back to Main Directory",
+              callback_data: `root folder`
+            }
+          ],
+        ],
+      }),
+      message_id,
+      chat_id: id
+    })
+  } else if (action === "confirm-delete") {
+    oAuth2Client.setCredentials(users[id].tokens[0]);
+    deleteFolderOrFile(oAuth2Client, data, id, message_id);
+  } else if (action === "delete-file") {
+    bot.editMessageText("Are you sure want to delete this file ?", {
+      message_id,
+      chat_id: id,
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "Yes", callback_data: `${data} confirm-delete` }, { text: "No", callback_data: `root folder` }], [{ text: "❌ Close", callback_data: " cancel" }]]
+      })
+    })
+  } else if (action === "delete-folder") {
+    bot.editMessageText("Are you sure want to delete this folder ?", {
+      message_id,
+      chat_id: id,
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "Yes", callback_data: `${data} confirm-delete` }, { text: "No", callback_data: `${data} folder` }], [{ text: "❌ Close", callback_data: " cancel" }]]
+      })
+    })
+  } else if (action === "edit") {
+    bot.editMessageText("Input your folder/file name", {
+      message_id,
+      chat_id: id,
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "Cancel", callback_data: " cancel" }]]
+      })
+    })
+    users[id].onUpdateFile = true;
+    users[id].last_message_id = message_id;
+    users[id].choosen_parent_folder = data;
+  } else if (action === "create") {
+    bot.editMessageText("Input your folder name (default: 'New Folder')", {
+      message_id,
+      chat_id: id,
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "Cancel", callback_data: " cancel" }]]
+      })
+    })
+    
+    users[id].onCreateFile = true;
+    users[id].last_message_id = message_id;
+    users[id].choosen_parent_folder = data;
   } else if(action === "start") {
     uploadFileQueue.add({
       message_id,
