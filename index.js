@@ -259,8 +259,13 @@ function checkFolderOrFileExists(auth, folder_or_file_id) {
       fields: 'nextPageToken, files(*)',
       spaces: 'drive'
     }, (err, res) => {
-      if (err) return resolve(false);
-      return resolve(true);
+      if (err) return reject("An error occured!");
+      const files = res.data.files;
+      if (files.length) {
+        return resolve(true);
+      } else {
+        return resolve(false);
+      }
     })
   })
 }
