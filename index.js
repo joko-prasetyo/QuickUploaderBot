@@ -248,6 +248,23 @@ uploadFileQueue.on("global:failed", async (jobId, data) => {
   })
 });
 
+function checkFolderOrFileExists(auth, folder_or_file_id) {
+  return new Promise((resolve, reject) => {
+    const drive = google.drive({version: 'v3', auth});
+    drive.files.list({
+      includeRemoved: false,
+      fileId: folder_or_file_id,
+      trashed: false,
+      q: `'${folder_or_file_id}' in parents and trashed=false`,
+      fields: 'nextPageToken, files(*)',
+      spaces: 'drive'
+    }, (err, res) => {
+      if (err) return resolve(false);
+      return resolve(true);
+    })
+  })
+}
+
 function sendListFiles(auth, chat, fileId = 'root', isEdit = false) {
   const drive = google.drive({version: 'v3', auth});
   drive.files.list({
@@ -678,6 +695,10 @@ For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
     users[id].last_message_id = message_id;
     users[id].choosen_parent_folder = data;
   } else if(action === "start") {
+    oAuth2Client.setCredentials(users[id].tokens[0]);
+    const file_or_folder_exists = await checkFolderOrFileExists(oAuth2Client, users[id].current_folder_id);
+    console.log(file_or_folder_exists);
+    if (!file_or_folder_exists) return bot.sendMessage(id, "Folder not found! Please Select an existing Folder to Upload!")
     uploadFileQueue.add({
       message_id,
       chatId: id,
