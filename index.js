@@ -404,7 +404,7 @@ Use /auth command to authenticate your account!
         if (err) return bot.sendMessage(chatId, "URL might be broken! Please try again later.")
         const limit = 107374182400;
         if (fileSize <= limit) {
-          const filename = url.split('/').pop().split('#')[0].split('?')[0].replace(extension, "") + `.${extension}`;
+          const filename = url.split('/').pop().split('#')[0].split('?')[0].replace("." + extension, "") + `.${extension}`;
           await bot.sendMessage(chatId, `
 Well done! Your file is ready!
 
