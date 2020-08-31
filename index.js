@@ -273,7 +273,7 @@ ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
               oAuth2Client.setCredentials(tokens[0]);
               fileCounts(torrent_downloaded_files_dir);
               setInterval(() => {
-                if (!file_counts) {
+                if (!files_count) {
                   done(null, {
                     message: `
             **Download completed!**
