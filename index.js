@@ -13,12 +13,15 @@ const User = require("./src/models/user");
 const request = require("request");
 const progress = require("request-progress");
 const path = require("path");
-const dir = "./shared";
+const WebTorrent = require("webtorrent");
+const client = new WebTorrent();
 const { OAuth2Client } = require('google-auth-library');
-const { chat } = require("googleapis/build/src/apis/chat");
-const PORT = process.env.PORT || 3000
-
+const PORT = process.env.PORT || 3000;
+const isDirectory = require('is-directory');
+const dir = "./shared";
+const torrent_downloaded_files_dir = "./torrent-downloaded-files";
 fs.mkdirSync(dir, { recursive: true });
+fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
 
 const bot = new TelegramBot(
   process.env.TOKEN,
@@ -31,6 +34,59 @@ const users = {}
 let REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 const uploadFileQueue = new Queue('uploadFile', REDIS_URL);
+const uploadTorrentQueue = new Queue('uploadTorrent', REDIS_URL);
+
+let files_count = 0;
+function fileCounts(current_path = "./torrent-downloaded-files") {
+  fs.readdirSync(current_path).forEach((file, index) => {
+      if (isDirectory.sync(`${current_path}/${file}`)) {
+        fileCounts(`${current_path}/${file}`);
+      } else {
+        files_count += 1;
+      }
+  });
+}
+
+async function uploadFolder(auth, folder_id, current_path = "./torrent-downloaded-files") {
+  const drive = google.drive({ version: 'v3', auth });
+  fs.readdir(current_path, (err, files) => {
+    if (!files.length) return;
+    files.forEach(file => {
+      if (isDirectory.sync(`${current_path}/${file}`)) {
+        drive.files.create({
+          resource: {
+            parents: [folder_id],
+            mimeType: 'application/vnd.google-apps.folder',
+            name: file
+          },
+          auth
+        }, (err, folder) => {
+          if (err) return console.log("Something went wrong!");
+          console.log("Folder Created");
+          uploadFolder(auth, folder.id, `${current_path}/${file}`)
+        })
+      } else {
+        // upload to google drive
+        const fileMetadata = {
+          'name': file,
+          parents: [folder_id]
+        };
+        const media = {
+          mimeType: "application/octet-stream",
+          resumable: true,
+          body: fs.createReadStream(`${current_path}/${file}`)
+        };
+        drive.files.create({
+          resource: fileMetadata,
+          media,
+          fields: 'id'
+        }, (err, data) => {
+          files_count--;
+        })
+      }
+    });
+  });
+}
 
 function uploadFile(auth, filename, folderId, { job, done }) {
   return new Promise((resolve, reject) => {
@@ -157,6 +213,80 @@ function insertFolder(auth, folder, chat_id, message_id) {
 
 const MAXIMUM_CONCURRENCY_WORKER = 1
 let current_job_id;
+uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) =>{
+  const { url, message_id, chat_id, user_folder_id, tokens } = job.data;
+  const oAuth2Client = new OAuth2Client(
+    process.env.CLIENT_ID,
+    process.env.CLIENT_SECRET,
+    process.env.REDIRECT_URI
+  );
+
+  request({ url, encoding: null }, (err, resp, buffer) => {
+    client.add(buffer, (torrent) => {
+      const files = torrent.files;
+      let length = files.length;
+      console.log(torrent.downloadSpeed);
+      console.log(torrent.downloaded);
+      let current_file;
+      // Stream each file to the disk
+      const interval = setInterval(() => {
+        if (current_file) {
+          bot.editMessageText(`
+Downloading: ${current_file.name} (${filesize(current_file.size)})
+Download Speed: ${filesize(torrent.downloadSpeed)}/s
+Downloaded: ${filesize(torrent.downloaded)}
+Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
+ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
+        `, {
+            chat_id,
+            message_id,
+            reply_markup: JSON.stringify({
+              inline_keyboard: [[{ text: "Cancel", callback_data: " cancel-torrent" }]]
+            })
+          }).catch(e => {
+
+          })
+        }
+      }, 2000);
+      files.forEach((file) => {
+        const source = file.createReadStream();
+        const destination = fs.createWriteStream("./torrent-downloaded-files/" + file.name);
+        source
+          .on("end", () => {
+            current_file = {
+              name: file.name,
+              size: file.length,
+            };
+            // close after all files are saved
+            length -= 1;
+            if (!length) {
+              // Download Finished, Upload all downloaded files to gdrive
+              files_count = 0;
+              clearInterval(interval);
+              oAuth2Client.setCredentials(tokens[0]);
+              fileCounts(torrent_downloaded_files_dir);
+              let interval = setInterval(() => {
+                if (!file_counts) {
+                  done(null, {
+                    message: `
+            **Download completed!**
+            
+            Preparing files to upload...
+            `,
+                    message_id,
+                    chat_id
+                  });
+                }
+              }, 1000)
+              uploadFolder(oAuth2Client, user_folder_id, torrent_downloaded_files_dir, files_count, done);
+            }
+          })
+          .pipe(destination);
+      });
+    });
+  });
+})
+
 uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   current_job_id = job.id; 
 
@@ -212,6 +342,27 @@ Preparing files to upload...
       });
     })
     .pipe(writer);
+});
+
+uploadTorrentQueue.on("global:completed", (jobId, data) => {
+  const { message_id, chat_id, message } = JSON.parse(data)
+  bot.editMessageText(message, {
+    message_id,
+    chat_id,
+    reply_markup: JSON.stringify({
+      remove_inline_keyboard: true
+    }),
+    parse_mode: "Markdown"
+  })
+
+  fs.readdir(torrent_downloaded_files_dir, (err, files) => {
+    if (err) throw err;
+    for (const file of files) {
+      fs.unlink(path.join(torrent_downloaded_files_dir, file), (err) => {
+        if (err) throw err;
+      });
+    }
+  });
 });
 
 uploadFileQueue.on("global:progress", (jobId, { message, message_id, chat_id }) => {
@@ -336,8 +487,10 @@ bot.on("message", async (msg) => {
       process.env.CLIENT_SECRET,
       process.env.REDIRECT_URI
     );
+
     const chatId = msg.chat.id;
     const user_id = msg.from.id;
+  
     // console.log(msg)
     const user = await User.findOne({ telegram_user_id: user_id });
     if (user) {
@@ -347,6 +500,27 @@ bot.on("message", async (msg) => {
         current_folder_id: user.current_folder_id || "root"
       }
     }
+
+    if (msg.document && msg.document.mime_type === "application/x-bittorrent") {
+      const url = await bot.getFileLink(msg.document.file_id);
+      return bot.sendMessage(chatId, "Your torrent file has been added to the queue").then(({ message_id }) => {
+        uploadTorrentQueue.add({
+          url,
+          message_id,
+          chat_id: msg.chat.id,
+          user_folder_id: user.current_folder_id,
+          tokens: user.tokens
+        }, {
+          removeOnFail: true,
+          removeOnComplete: true
+        })
+      })
+    }
+
+    if (msg.document || msg.photo || msg.video || msg.voice) {
+      return bot.sendMessage(chatId, "Sorry, this bot is currently not supporting files except torrent");
+    }
+
     if (msg.text.toLowerCase() === "/start") {
       if (!user) {
         const newUser = new User({ telegram_user_id: user_id, username: msg.from.username })
@@ -473,7 +647,7 @@ To Authorize your google account follow step by step below:
 1. Click 'Authorize' button and visit the link
 2. Choose whichever account do you want to use
 3. Allow all permissions to this bot
-4. Copy the verification bot and send it to me
+4. Copy the verification code and send it to me
 `,
         options
       );
@@ -497,6 +671,8 @@ Plan          : ${user.plan}
 Drive Account : ${user.tokens.length}
 Referral      : 0
  </pre>`, { parse_mode: "HTML" });
+    } else if (msg.text.toLowerCase() === "/torrent") {
+      bot.sendMessage(chatId, "I can download your torrent files and upload to your google drive by sending torrent file to me");
     } else if (msg.text.toLowerCase() === "/upgrade") {
       bot.sendMessage(chatId, "Coming soon!");
     } else if (msg.text.toLowerCase() === "/revoke") {
@@ -703,7 +879,7 @@ For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
     oAuth2Client.setCredentials(users[id].tokens[0]);
     const file_or_folder_exists = await checkFolderOrFileExists(oAuth2Client, users[id].current_folder_id);
     console.log(file_or_folder_exists);
-    if (!file_or_folder_exists) return bot.sendMessage(id, "Folder not found! Please Select an existing Folder to Upload!")
+    if (!file_or_folder_exists) return bot.sendMessage(id, "Folder not found! Please select an existing folder to upload!")
     uploadFileQueue.add({
       message_id,
       chatId: id,

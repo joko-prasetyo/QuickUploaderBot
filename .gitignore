@@ -5,3 +5,4 @@ shared
 dump.rdb
 credentials.json
 token.json
+torrent-downloaded-files
