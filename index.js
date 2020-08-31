@@ -231,6 +231,13 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) =>{
       // Stream each file to the disk
       const interval = setInterval(() => {
         if (current_file) {
+          console.log(`
+          Downloading: ${current_file.name} (${filesize(current_file.size)})
+          Download Speed: ${filesize(torrent.downloadSpeed)}/s
+          Downloaded: ${filesize(torrent.downloaded)}
+          Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
+          ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
+                  `)
           bot.editMessageText(`
 Downloading: ${current_file.name} (${filesize(current_file.size)})
 Download Speed: ${filesize(torrent.downloadSpeed)}/s
@@ -265,7 +272,7 @@ ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
               clearInterval(interval);
               oAuth2Client.setCredentials(tokens[0]);
               fileCounts(torrent_downloaded_files_dir);
-              let interval = setInterval(() => {
+              setInterval(() => {
                 if (!file_counts) {
                   done(null, {
                     message: `
