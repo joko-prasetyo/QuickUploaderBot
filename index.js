@@ -105,7 +105,7 @@ async function uploadFolder(
           (err, data) => {
             console.log(err);
             if (err) return bot.sendMessage(chat_id, "Failed to upload file");
-            console.log("Folder Uploaded!", data);
+            console.log("File Uploaded!");
             files_count--;
           },
           {
@@ -411,7 +411,7 @@ Uploading files to your drive...`,
               fileCounts(torrent_downloaded_files_dir);
               setInterval(() => {
                 if (!files_count) {
-                  client.remove(buffer);
+                  console.log(torrent);
                   done(null, {
                     message: `
 **Upload completed!**
