@@ -103,15 +103,16 @@ async function uploadFolder(
             fields: "id",
           },
           (err, data) => {
+            if (err) return bot.sendMessage(chat_id, message_id);
             files_count--;
           },
           {
             onUploadProgress(e) {
               try {
                 if (!isTriggered) {
-                  isTrigerred = true;
+                  isTriggered = true;
                   setTimeout(() => {
-                    isTrigerred = false;
+                    isTriggered = false;
                   }, 2000);
                   bot.editMessageText(
                     `
@@ -125,14 +126,6 @@ Uploaded: ${filesize(e.bytesRead).toFixed(2)}
                       chat_id,
                       reply_markup: JSON.stringify({
                         remove_inline_keyboard: true
-                        // inline_keyboard: [
-                        //   [
-                        //     {
-                        //       text: "Cancel",
-                        //       callback_data: `${job.id} cancel-torrent-upload`,
-                        //     },
-                        //   ],
-                        // ],
                       }),
                     }
                   );
@@ -400,12 +393,22 @@ ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}s
             length -= 1;
             if (!length) {
               // Download Finished, Upload all downloaded files to gdrive
+              bot
+            .editMessageText(
+              `
+Download completed!
+
+Uploading files to your drive...`,
+              {
+                chat_id,
+                message_id,
+              }
+            )
               clearInterval(interval);
               oAuth2Client.setCredentials(tokens[0]);
               fileCounts(torrent_downloaded_files_dir);
               setInterval(() => {
                 if (!files_count) {
-                  client.remove(buffer);
                   done(null, {
                     message: `
 **Upload completed!**
