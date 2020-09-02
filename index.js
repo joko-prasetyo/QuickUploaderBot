@@ -68,9 +68,9 @@ async function uploadFolder(
   let isTriggered = false;
   fs.readdir(current_path, (err, files) => {
     if (!files.length) return;
-    files.forEach((file) => {
+    files.forEach(async (file) => {
       if (isDirectory.sync(`${current_path}/${file}`)) {
-        drive.files.create(
+       await drive.files.create(
           {
             resource: {
               parents: [folder_id],
