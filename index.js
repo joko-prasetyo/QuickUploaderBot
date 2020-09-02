@@ -103,8 +103,9 @@ async function uploadFolder(
             fields: "id",
           },
           (err, data) => {
-            if (err) return bot.sendMessage(chat_id, message_id);
-            console.log("Folder Uploaded!", data.name);
+            console.log(err);
+            if (err) return bot.sendMessage(chat_id, "Failed to upload file");
+            console.log("Folder Uploaded!", data);
             files_count--;
           },
           {
