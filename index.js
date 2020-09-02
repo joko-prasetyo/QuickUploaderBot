@@ -20,7 +20,6 @@ const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrent-downloaded-files";
-
 fs.mkdirSync(dir, { recursive: true });
 fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
 
@@ -28,7 +27,7 @@ const deleteFolderRecursive = function(dir) {
   if (fs.existsSync(dir)) {
     fs.readdirSync(dir).forEach((file, index) => {
       const curPath = path.join(dir, file);
-      if (fs.lstatSync(curPath).isDirectory()) { // recurse
+      if (fs.lstatSync(curPath).isDirectory()) {
         deleteFolderRecursive(curPath);
       } else { // delete file
         fs.unlinkSync(curPath);
@@ -343,6 +342,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         if (!isActive) {
           clearInterval(interval);
           client.remove(buffer);
+          return;
         }
         if (current_file) {
           console.log(`
@@ -502,7 +502,7 @@ uploadTorrentQueue.on("global:completed", async (jobId, data) => {
       console.log("cannot edit message");
     });
   // Delete all file in torrent-downloaded-files folder
-  deleteFolderRecursive(torrent_downloaded_files_dir)
+  deleteFolderRecursive(torrent_downloaded_files_dir);
   fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
 
 });
@@ -544,14 +544,14 @@ uploadFileQueue.on("global:completed", async (jobId, data) => {
       console.log(e.message);
     });
 
-    rimraf.sync(dir)
+    deleteFolderRecursive(dir);
     fs.mkdirSync(dir, { recursive: true });
 });
 
 uploadFileQueue.on("global:failed", async (jobId, data) => {
   console.log("Job failed");
   // Delete all file in shared folder
-  rimraf.sync(dir)
+  deleteFolderRecursive(dir);
   fs.mkdirSync(dir, { recursive: true });
 });
 
