@@ -96,7 +96,7 @@ async function uploadFolder(
           resumable: true,
           body: fs.createReadStream(`${current_path}/${file}`),
         };
-        drive.files.create(
+        await drive.files.create(
           {
             resource: fileMetadata,
             media,
