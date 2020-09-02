@@ -15,6 +15,7 @@
   "dependencies": {
     "bull": "^3.18.0",
     "compression": "^1.7.4",
+    "countdown": "^2.6.0",
     "dotenv": "^8.2.0",
     "express": "^4.17.1",
     "filenamify-url": "^2.1.1",

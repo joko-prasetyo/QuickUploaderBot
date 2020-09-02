@@ -62,7 +62,7 @@ async function uploadFolder(
   auth,
   folder_id,
   current_path = "./torrent-downloaded-files",
-  job
+  { message_id, chat_id }
 ) {
   const drive = google.drive({ version: "v3", auth });
   let isTriggered = false;
@@ -82,7 +82,7 @@ async function uploadFolder(
           (err, folder) => {
             if (err) return console.log("Something went wrong!");
             console.log("Folder Created");
-            uploadFolder(auth, folder.id, `${current_path}/${file}`);
+            uploadFolder(auth, folder.id, `${current_path}/${file}`, { message_id, chat_id });
           }
         );
       } else {
@@ -121,8 +121,8 @@ Uploaded: ${filesize(e.bytesRead).toFixed(2)}
 
                       `,
                     {
-                      message_id: job.data.message_id,
-                      chat_id: job.data.chatId,
+                      message_id,
+                      chat_id,
                       reply_markup: JSON.stringify({
                         remove_inline_keyboard: true
                         // inline_keyboard: [
@@ -359,7 +359,9 @@ Downloading: ${current_file.name} (${filesize(current_file.size)})
 Download Speed: ${filesize(torrent.downloadSpeed)}/s
 Downloaded: ${filesize(torrent.downloaded)}
 Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
-ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
+Peers: ${torrent.numPeers}
+Seeders: ${torrent.ratio}
+ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}s
         `,
               {
                 chat_id,
@@ -387,11 +389,13 @@ ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
           "./torrent-downloaded-files/" + file.name
         );
         source
-          .on("end", () => {
+          .on("data", () => {
             current_file = {
               name: file.name,
               size: file.length,
             };
+          })
+          .on("end", () => {
             // close after all files are saved
             length -= 1;
             if (!length) {
@@ -417,8 +421,7 @@ Thank you for using @QuickUploaderBot
                 oAuth2Client,
                 user_folder_id,
                 torrent_downloaded_files_dir,
-                files_count,
-                done
+                { message_id, chat_id }
               );
             }
           })
@@ -1278,19 +1281,27 @@ You can always bind your account to our bot by using /auth
     );
     users[id].tokens = [];
   } else if (action === "cancel-file-upload") {
-    const current_active_job = await uploadFileQueue.getJob(data);
-    await current_active_job.moveToCompleted({
-      message: `Action cancelled successfully!`,
-      message_id,
-      chat_id: id,
-    });
+    try {
+      const current_active_job = await uploadFileQueue.getJob(data);
+      await current_active_job.moveToCompleted({
+        message: `Action cancelled successfully!`,
+        message_id,
+        chat_id: id,
+      });
+    } catch (e) {
+      console.log(e.message);
+    }
   } else if (action === "cancel-torrent-upload") {
-    const current_active_job = await uploadTorrentQueue.getJob(data);
-    await current_active_job.moveToCompleted({
-      message: `Action cancelled successfully!`,
-      message_id,
-      chat_id: id,
-    });
+    try {
+      const current_active_job = await uploadTorrentQueue.getJob(data);
+      await current_active_job.moveToCompleted({
+        message: `Action cancelled successfully!`,
+        message_id,
+        chat_id: id,
+      });
+    } catch (e) {
+      console.log(e.message);
+    }
   } else if (action === "check-queue") {
     let activeJobs = await uploadFileQueue.getActive();
     const waitingJobsCount = await uploadFileQueue.getWaitingCount();
