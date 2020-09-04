@@ -568,13 +568,8 @@ function checkFolderOrFileExists(auth, folder_or_file_id) {
         spaces: "drive",
       },
       (err, res) => {
-        if (err) return reject("An error occured!");
-        const files = res.data.files;
-        if (files.length) {
-          return resolve(true);
-        } else {
-          return resolve(false);
-        }
+        if (err) return resolve(false);
+        return resolve(true);
       }
     );
   });
@@ -776,6 +771,7 @@ bot.on("message", async (msg) => {
     }
 
     if (msg.document && msg.document.mime_type === "application/x-bittorrent") {
+      console.log(user.tokens[0], users[chatId].current_folder_id);
       oAuth2Client.setCredentials(user.tokens[0]);
       const folderExists = await checkFolderOrFileExists(
         oAuth2Client,
