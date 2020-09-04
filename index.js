@@ -61,6 +61,8 @@ async function uploadFolderToDriveJob(
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
     fs.readdir(current_path, (err, files) => {
+      console.log(err);
+      console.log(current_path);
       if (!files.length)
         return resolve(
           done
@@ -74,7 +76,6 @@ async function uploadFolderToDriveJob(
       files.forEach(async (file_name, index) => {
         if (isDirectory.sync(`${current_path}/${file_name}`)) {
           console.log("this is a directory");
-          console.log(drive_folder_id, current_path, job.data);
           await drive.files.create(
             {
               resource: {
@@ -90,7 +91,7 @@ async function uploadFolderToDriveJob(
               console.log("Folder Created", folder);
               await uploadFolderToDriveJob(
                 auth,
-                folder,
+                folder.id,
                 `${current_path}/${file_name}`,
                 { job }
               );
