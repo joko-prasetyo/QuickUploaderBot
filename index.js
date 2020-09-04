@@ -66,9 +66,9 @@ async function uploadFolderToDriveJob(
         message_id: job.data.message_id,
         chat_id: job.data.chat_id,
       }) : "No file found");
-      console.log(files);
+      console.log(files, `${current_path}/${file}`);
       files.forEach(async (file_name, index) => {
-        if (isDirectory.sync(`${current_path}/${file}`)) {
+        if (isDirectory.sync(`${current_path}/${file_name}`)) {
           console.log("this is a directory");
           await drive.files.create({
               resource: {
