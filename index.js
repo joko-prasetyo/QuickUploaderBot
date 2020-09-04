@@ -909,12 +909,8 @@ Use /auth command to authenticate your account!
         return bot.sendMessage(chatId, "Invalid url, please try again!");
       }
       request({ url, method: "HEAD" }, async (err, response, body) => {
-        oAuth2Client.setCredentials(user.tokens[0]);
         const fileSize = response.headers["content-length"];
-        const quota = await showUserStorageQuota(oAuth2Client);
         const extension = mime.extension(response.headers["content-type"]);
-        if (!quota) return bot.sendMessage(chatId, "Something went wrong! Please try again later.");
-        if (quota.usageInDrive + fileSize > quota.limit) return bot.sendMessage(chatId, "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.");
         if (err)
           return bot.sendMessage(
             chatId,
@@ -1271,6 +1267,12 @@ For example:  ` +
     users[id].choosen_parent_folder = data;
   } else if (action === "start") {
     oAuth2Client.setCredentials(users[id].tokens[0]);
+    const quota = await showUserStorageQuota(oAuth2Client);
+    if (!quota) return bot.sendMessage(id, "Something went wrong! Please try again later.");
+    if (quota.usageInDrive + fileSize > quota.limit) return bot.editMessageText("Insufficient Google Drive Space! You can fix this by deleting some files in your drives.", {
+      chat_id: id,
+      message_id
+    });
     const file_or_folder_exists = await checkFolderOrFileExists(
       oAuth2Client,
       users[id].current_folder_id
