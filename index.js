@@ -61,18 +61,22 @@ async function uploadFolderToDriveJob(
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
     fs.readdir(current_path, (err, files) => {
-      if (!files.length) return resolve(done ? done(null, {
-        message: "No file found inside torrent!",
-        message_id: job.data.message_id,
-        chat_id: job.data.chat_id,
-      }) : "No file found");
+      if (!files.length)
+        return resolve(
+          done
+            ? done(null, {
+                message: "No file found inside torrent!",
+                message_id: job.data.message_id,
+                chat_id: job.data.chat_id,
+              })
+            : "No file found"
+        );
       files.forEach(async (file_name, index) => {
         if (isDirectory.sync(`${current_path}/${file_name}`)) {
           console.log("this is a directory");
-          console.log(
-            drive_folder_id,
-            current_path, job.data);
-          await drive.files.create({
+          console.log(drive_folder_id, current_path, job.data);
+          await drive.files.create(
+            {
               resource: {
                 parents: [drive_folder_id],
                 mimeType: "application/vnd.google-apps.folder",
@@ -93,36 +97,40 @@ async function uploadFolderToDriveJob(
             }
           );
         } else {
-          await uploadFileToDriveJob(auth, {
-            path: `${current_path}/`,
-            name: file_name,
-          }, drive_folder_id, job);
+          await uploadFileToDriveJob(
+            auth,
+            {
+              path: `${current_path}/`,
+              name: file_name,
+            },
+            drive_folder_id,
+            job
+          );
           await sleep(10000);
         }
 
         if (index === files.length - 1) {
-          resolve(done ? done(null, {
-            message: `
+          resolve(
+            done
+              ? done(null, {
+                  message: `
 **Upload completed!**
           
 You can check your uploaded file in /myfiles
           
 Thank you for using @QuickUploaderBot`,
-            message_id: job.data.message_id,
-            chat_id: job.data.chat_id,
-          }) : "Folder Uploaded")
+                  message_id: job.data.message_id,
+                  chat_id: job.data.chat_id,
+                })
+              : "Folder Uploaded"
+          );
         }
       });
     });
-  })
+  });
 }
 
-function uploadFileToDriveJob(
-  auth,
-  file,
-  drive_folder_id,
-  job
-) {
+function uploadFileToDriveJob(auth, file, drive_folder_id, job) {
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
     const fileMetadata = {
@@ -155,7 +163,9 @@ function uploadFileToDriveJob(
                 `
 Uploading ${file.name} to drive...
                 
-Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(2)}% 
+Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(
+                  2
+                )}% 
                       
 Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(fileSizeInBytes)}
                 `,
@@ -185,7 +195,7 @@ Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(fileSizeInBytes)}
           resolve(null);
         } else {
           resolve(file);
-        } 
+        }
       }
     );
   });
@@ -445,10 +455,15 @@ Preparing files to upload...
           message_id: job.data.message_id,
           chat_id: job.data.chat_id,
         });
-        const uploaded_file = await uploadFileToDriveJob(oAuth2Client, {
-          name: job.data.filename,
-          path: `${dir}/`
-        }, job.data.current_folder_id, job);
+        const uploaded_file = await uploadFileToDriveJob(
+          oAuth2Client,
+          {
+            name: job.data.filename,
+            path: `${dir}/`,
+          },
+          job.data.current_folder_id,
+          job
+        );
         if (uploaded_file) {
           done(null, {
             message: `
@@ -657,50 +672,70 @@ function sendListFiles(auth, chat, fileId = "root", isEdit = false) {
             });
       } else {
         console.log("No files found.");
-        bot.editMessageText("Choose your file/folder to manage!", {
-          message_id: chat.message_id,
-          chat_id: chat.id,
-          reply_markup: JSON.stringify({
-            inline_keyboard:
-              fileId !== "root"
-                ? [
-                    [
-                      {
-                        text: "⚙️ Folder Settings",
-                        callback_data: `${fileId} settings`,
-                      },
-                    ],
-                    [
-                      {
-                        text: "📤 Upload here!",
-                        callback_data: `${fileId} upload`,
-                      },
-                    ],
-                    [
-                      {
-                        text: "🔙 Back to Main Directory",
-                        callback_data: "root folder",
-                      },
-                    ],
-                    [{ text: "❌ Close", callback_data: " cancel" }],
-                  ]
-                : [
-                    [
-                      {
-                        text: "⚙️ Folder Settings",
-                        callback_data: `${fileId} settings`,
-                      },
-                    ],
-                    [
-                      {
-                        text: "📤 Upload here!",
-                        callback_data: `${fileId} upload`,
-                      },
-                    ],
-                    [{ text: "❌ Close", callback_data: " cancel" }],
+        fileId === "root"
+          ? bot.sendMessage(chat.id, "Choose your file/folder to manage!", {
+              reply_markup: JSON.stringify({
+                inline_keyboard: [
+                  [
+                    {
+                      text: "⚙️ Folder Settings",
+                      callback_data: `${fileId} settings`,
+                    },
                   ],
-          }),
-        });
+                  [
+                    {
+                      text: "📤 Upload here!",
+                      callback_data: `${fileId} upload`,
+                    },
+                  ],
+                  [{ text: "❌ Close", callback_data: " cancel" }],
+                ],
+              }),
+            })
+          : bot.editMessageText("Choose your file/folder to manage!", {
+              message_id: chat.message_id,
+              chat_id: chat.id,
+              reply_markup: JSON.stringify({
+                inline_keyboard:
+                  fileId !== "root"
+                    ? [
+                        [
+                          {
+                            text: "⚙️ Folder Settings",
+                            callback_data: `${fileId} settings`,
+                          },
+                        ],
+                        [
+                          {
+                            text: "📤 Upload here!",
+                            callback_data: `${fileId} upload`,
+                          },
+                        ],
+                        [
+                          {
+                            text: "🔙 Back to Main Directory",
+                            callback_data: "root folder",
+                          },
+                        ],
+                        [{ text: "❌ Close", callback_data: " cancel" }],
+                      ]
+                    : [
+                        [
+                          {
+                            text: "⚙️ Folder Settings",
+                            callback_data: `${fileId} settings`,
+                          },
+                        ],
+                        [
+                          {
+                            text: "📤 Upload here!",
+                            callback_data: `${fileId} upload`,
+                          },
+                        ],
+                        [{ text: "❌ Close", callback_data: " cancel" }],
+                      ],
+              }),
+            });
       }
     }
   );
@@ -742,8 +777,15 @@ bot.on("message", async (msg) => {
 
     if (msg.document && msg.document.mime_type === "application/x-bittorrent") {
       oAuth2Client.setCredentials(user.tokens[0]);
-      const folderExists = await checkFolderOrFileExists(oAuth2Client, user.current_folder_id);
-      if (!folderExists) return bot.sendMessage(chatId, "Folder not found! Please select an existing folder to upload!");
+      const folderExists = await checkFolderOrFileExists(
+        oAuth2Client,
+        user.current_folder_id
+      );
+      if (!folderExists)
+        return bot.sendMessage(
+          chatId,
+          "Folder not found! Please select an existing folder to upload!"
+        );
       const url = await bot.getFileLink(msg.document.file_id);
       return bot
         .sendMessage(chatId, "Your torrent file has been added to the queue")
