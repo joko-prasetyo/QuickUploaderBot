@@ -66,6 +66,7 @@ async function uploadFolderToDriveJob(
         message_id: job.data.message_id,
         chat_id: job.data.chat_id,
       }) : "No file found");
+      console.log(files);
       files.forEach(async (file_name, index) => {
         if (isDirectory.sync(`${current_path}/${file}`)) {
           await drive.files.create({
@@ -375,7 +376,7 @@ Uploading files to your drive...`,
                 );
                 clearInterval(interval);
                 oAuth2Client.setCredentials(tokens[0]);
-                fileCounts(torrent_downloaded_files_dir);
+                console.log("done!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                 await uploadFolderToDriveJob(
                   oAuth2Client,
                   user_folder_id,
