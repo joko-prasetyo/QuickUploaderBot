@@ -110,7 +110,7 @@ async function uploadFolderToDriveJob(
           await sleep(10000);
         }
 
-        if (index === files.length - 1) {
+        if (index === files.length - 1 && !isDirectory.sync(`${current_path}/${file_name}`)) {
           resolve(
             done
               ? done(null, {
