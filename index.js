@@ -86,10 +86,10 @@ async function uploadFolderToDriveJob(
               },
               async (err, folder) => {
                 if (err) return console.log("Something went wrong!");
-                console.log("Folder Created", folder);
+                console.log("Folder Created", folder.data.id);
                 await uploadFolderToDriveJob(
                   auth,
-                  folder.id,
+                  folder.data.id,
                   `${current_path}/${file_name}`,
                   { job }
                 );
@@ -147,6 +147,7 @@ function uploadFileToDriveJob(auth, file, drive_folder_id, job) {
       body: fs.createReadStream(file.path + file.name),
     };
     const fileSizeInBytes = fs.statSync(file.path + file.name)["size"];
+    console.log(fileSizeInBytes);
     drive.files.create(
       {
         resource: fileMetadata,
