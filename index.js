@@ -10,6 +10,7 @@ const SCOPES = ["https://www.googleapis.com/auth/drive"];
 const mime = require("mime-types");
 const isUrl = require("is-url");
 const User = require("./src/models/user");
+const parseTorrent = require('parse-torrent')
 const request = require("request");
 const progress = require("request-progress");
 const path = require("path");
@@ -36,17 +37,6 @@ let REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 const uploadFileQueue = new Queue("uploadFile", REDIS_URL);
 const uploadTorrentQueue = new Queue("uploadTorrent", REDIS_URL);
-
-let files_count = 0;
-function fileCounts(current_path = "./torrent-downloaded-files") {
-  fs.readdirSync(current_path).forEach((file, index) => {
-    if (isDirectory.sync(`${current_path}/${file}`)) {
-      fileCounts(`${current_path}/${file}`);
-    } else {
-      files_count += 1;
-    }
-  });
-}
 
 async function sleep(ms) {
   return new Promise((resolve, reject) => setTimeout(resolve, ms));
@@ -328,17 +318,23 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
             bot
               .editMessageText(
                 `
-Downloading: ${current_file.name} (${filesize(current_file.size)})
-Download Speed: ${filesize(torrent.downloadSpeed)}/s
-Downloaded: ${filesize(torrent.downloaded)}
-Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
-Peers: ${torrent.numPeers}
-Seeders: ${torrent.ratio}
-ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}s
+*Downloading*: ` + "`" + current_file.name + "` (" + filesize(current_file.size) + ")" + `
+
+*Download Speed*: ${filesize(torrent.downloadSpeed)}/s
+
+*Downloaded*: ${filesize(torrent.downloaded)}
+
+*Total Downloaded*: ${(torrent.progress * 100).toFixed(2)}%
+
+*Peers*: ${torrent.numPeers}
+*Seeders*: ${torrent.ratio}
+
+*ETA*: ${(torrent.timeRemaining / 1000).toFixed(2)}s
         `,
                 {
                   chat_id,
                   message_id,
+                  parse_mode: "Markdown",
                   reply_markup: JSON.stringify({
                     inline_keyboard: [
                       [
@@ -424,15 +420,15 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
       }
       job.progress({
         message: `
-Download Progress: ${(state.percent * 100).toFixed(2)}% 
+*Download Progress*: ${(state.percent * 100).toFixed(2)}% 
           
-Downloaded: ${filesize(state.size.transferred)} of ${filesize(state.size.total)}
+*Downloaded*: ${filesize(state.size.transferred)} of ${filesize(state.size.total)}
           
-Download Speed: ${filesize(state.speed)}/s
+*Download Speed*: ${filesize(state.speed)}/s
           
-ETA: ${state.time.remaining}s`,
+*ETA*: ${state.time.remaining}s`,
         message_id: job.data.message_id,
-        chat_id: job.data.chat_id,
+        chat_id: job.data.chat_id
       });
     })
     .on("error", function (err) {
@@ -443,10 +439,9 @@ ETA: ${state.time.remaining}s`,
       if (requested) {
         job.progress({
           message: `
-**Download completed!**
+*Download completed!*
   
-Preparing files to upload...
-  `,
+Preparing files to upload...`,
           message_id: job.data.message_id,
           chat_id: job.data.chat_id,
         });
@@ -459,6 +454,7 @@ Preparing files to upload...
           job.data.current_folder_id,
           job
         );
+        console.log(uploaded_file);
         if (uploaded_file) {
           done(null, {
             message: `
@@ -470,6 +466,12 @@ Thank you for using @QuickUploaderBot`,
             message_id: job.data.message_id,
             chat_id: job.data.chat_id,
           });
+        } else {
+          done(null, {
+            message: "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.",
+            message_id: job.data.message_id,
+            chat_id: job.data.chat_id,
+          })
         }
       }
     })
@@ -727,6 +729,21 @@ function sendListFiles(auth, chat, fileId = "root", isEdit = false) {
   );
 }
 
+function showUserStorageQuota(auth) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const drive = google.drive({ version: "v3", auth });
+      const about = await drive.about.get({
+        fields: "storageQuota(*)"
+      });
+      console.log(about)
+      resolve(about.data.storageQuota);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
 bot.onText(/\/echo (.+)/, (msg, match) => {
   // 'msg' is the received Message from Telegram
   // 'match' is the result of executing the regexp above on the text content
@@ -767,29 +784,38 @@ bot.on("message", async (msg) => {
         oAuth2Client,
         users[chatId].current_folder_id
       );
-      if (!folderExists)
-        return bot.sendMessage(
-          chatId,
-          "Folder not found! Please select an existing folder to upload!"
-        );
+      if (!folderExists) return bot.sendMessage(chatId, "Folder not found! Please select an existing folder to upload!");
       const url = await bot.getFileLink(msg.document.file_id);
-      return bot
-        .sendMessage(chatId, "Your torrent file has been added to the queue")
-        .then(({ message_id }) => {
-          uploadTorrentQueue.add(
-            {
-              url,
-              message_id,
-              chat_id: msg.chat.id,
-              user_folder_id: user.current_folder_id,
-              tokens: user.tokens,
-            },
-            {
-              removeOnFail: true,
-              removeOnComplete: true,
-            }
-          );
-        });
+      const quota = await showUserStorageQuota(oAuth2Client);
+      if (!quota) return bot.sendMessage(chatId, "Something went wrong! Please try again later.");
+      request({ url, encoding: null }, (err, resp, buffer) => {
+        const torrent = parseTorrent(buffer);
+        if (quota.usageInDrive + torrent.length > quota.limit) {
+          bot.sendMessage(chatId, "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.");
+        } else {
+          bot.sendMessage(chatId, "Your torrent file has been added to the queue", {
+            reply_markup: JSON.stringify({
+              inline_keyboard: [[{ text: "Cancel", callback_data: " cancel-torrent-upload" }]]
+            })
+          })
+          .then(({ message_id }) => {
+            uploadTorrentQueue.add(
+              {
+                url,
+                message_id,
+                chat_id: msg.chat.id,
+                user_folder_id: user.current_folder_id,
+                tokens: user.tokens,
+              },
+              {
+                removeOnFail: true,
+                removeOnComplete: true,
+              }
+            );
+          });
+        }
+      })
+      return;
     }
 
     if (msg.document || msg.photo || msg.video || msg.voice) {
