@@ -69,6 +69,7 @@ async function uploadFolderToDriveJob(
       console.log(files);
       files.forEach(async (file_name, index) => {
         if (isDirectory.sync(`${current_path}/${file}`)) {
+          console.log("this is a directory");
           await drive.files.create({
               resource: {
                 parents: [drive_folder_id],
