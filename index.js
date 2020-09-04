@@ -108,19 +108,19 @@ async function uploadFolderToDriveJob(
             );
             console.log(file)
             await sleep(10000);
-            console.log("done sleep")
+            console.log("done sleep");
           }
   
-          if (index === files.length - 1 && !isDirectory.sync(`${current_path}/${file_name}`)) {
+          if (index === files.length - 1) {
             resolve(
               done
                 ? done(null, {
                     message: `
-  **Upload completed!**
+**Upload completed!**
             
-  You can check your uploaded file in /myfiles
+You can check your uploaded file in /myfiles
             
-  Thank you for using @QuickUploaderBot`,
+Thank you for using @QuickUploaderBot`,
                     message_id: job.data.message_id,
                     chat_id: job.data.chat_id,
                   })
