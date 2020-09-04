@@ -391,12 +391,17 @@ Uploading files to your drive...`,
                 );
                 clearInterval(interval);
                 oAuth2Client.setCredentials(tokens[0]);
-                await uploadFolderToDriveJob(
+                const finished = await uploadFolderToDriveJob(
                   oAuth2Client,
                   user_folder_id,
                   torrent_downloaded_files_dir,
                   { job, done }
                 );
+
+                if (finished) {
+                  console.log("Finished!");
+                  client.remove(buffer);
+                }
               }
             })
             .pipe(destination);
