@@ -18,24 +18,14 @@ const client = new WebTorrent();
 const { OAuth2Client } = require("google-auth-library");
 const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
+const rimraf = require("rimraf");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrent-downloaded-files";
+const torrent_temp_dir = "./torrent-temp-files/";
+
 fs.mkdirSync(dir, { recursive: true });
 fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
-
-const deleteFolderRecursive = function(dir) {
-  if (fs.existsSync(dir)) {
-    fs.readdirSync(dir).forEach((file, index) => {
-      const curPath = path.join(dir, file);
-      if (fs.lstatSync(curPath).isDirectory()) {
-        deleteFolderRecursive(curPath);
-      } else { // delete file
-        fs.unlinkSync(curPath);
-      }
-    });
-    fs.rmdirSync(dir);
-  }
-};
+fs.mkdirSync(torrent_temp_dir, { recursive: true });
 
 const bot = new TelegramBot(process.env.TOKEN, {
   polling: true,
@@ -56,6 +46,10 @@ function fileCounts(current_path = "./torrent-downloaded-files") {
       files_count += 1;
     }
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve, reject) => setTimeout(resolve, ms));
 }
 
 async function uploadFolder(
@@ -138,6 +132,7 @@ Uploaded: ${filesize(e.bytesRead).toFixed(2)}
             },
           }
         );
+        await sleep(10000);
       }
     });
   });
@@ -323,13 +318,12 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     process.env.CLIENT_SECRET,
     process.env.REDIRECT_URI
   );
-
   request({ url, encoding: null }, (err, resp, buffer) => {
-    client.add(buffer, (torrent) => {
+    client.add(buffer, {
+      path: torrent_downloaded_files_dir
+    }, (torrent) => {
       const files = torrent.files;
       let length = files.length;
-      console.log(torrent.downloadSpeed);
-      console.log(torrent.downloaded);
       let current_file;
       // Stream each file to the disk
       const interval = setInterval(async () => {
@@ -337,7 +331,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         if (!isActive) {
           clearInterval(interval);
           client.remove(buffer);
-          return;
+          return done();
         }
         if (current_file) {
           console.log(`
@@ -381,7 +375,7 @@ ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}s
       files.forEach((file) => {
         const source = file.createReadStream();
         const destination = fs.createWriteStream(
-          "./torrent-downloaded-files/" + file.name
+          torrent_temp_dir + file.name
         );
         source
           .on("data", () => {
@@ -412,6 +406,7 @@ Uploading files to your drive...`,
               setInterval(() => {
                 if (!files_count) {
                   console.log(torrent);
+
                   done(null, {
                     message: `
 **Upload completed!**
@@ -456,7 +451,8 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
       const isActive = await job.isActive();
       if (!isActive) {
         requested = false;
-        return req.abort();
+        req.abort();
+        return done();
       }
       job.progress({
         message: `
@@ -510,10 +506,11 @@ uploadTorrentQueue.on("global:completed", async (jobId, data) => {
     .catch(() => {
       console.log("cannot edit message");
     });
-  // Delete all file in torrent-downloaded-files folder
-  deleteFolderRecursive(torrent_downloaded_files_dir);
-  fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
-
+    // Delete all file in torrent-downloaded-files folder
+    rimraf(torrent_downloaded_files_dir, function () { 
+      console.log("done");
+      fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+    });
 });
 
 uploadFileQueue.on(
@@ -553,15 +550,19 @@ uploadFileQueue.on("global:completed", async (jobId, data) => {
       console.log(e.message);
     });
 
-    deleteFolderRecursive(dir);
-    fs.mkdirSync(dir, { recursive: true });
+    rimraf(dir, () => {
+      console.log("Directory Emptied!");
+      fs.mkdirSync(dir, { recursive: true });
+    })
 });
 
 uploadFileQueue.on("global:failed", async (jobId, data) => {
   console.log("Job failed");
   // Delete all file in shared folder
-  deleteFolderRecursive(dir);
-  fs.mkdirSync(dir, { recursive: true });
+  rmdirAsync(dir, () => {
+    console.log("deleted");
+    fs.mkdirSync(dir, { recursive: true });
+  })
 });
 
 function checkFolderOrFileExists(auth, folder_or_file_id) {
