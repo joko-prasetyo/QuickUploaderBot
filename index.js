@@ -130,6 +130,7 @@ function uploadFileToDriveJob(
       resumable: true,
       body: fs.createReadStream(file.path + file.name),
     };
+    console.log(media);
     const fileSizeInBytes = fs.statSync(file.path + file.name)["size"];
     drive.files.create(
       {
