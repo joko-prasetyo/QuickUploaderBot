@@ -48,7 +48,7 @@ function fileCounts(current_path = "./torrent-downloaded-files") {
   });
 }
 
-function sleep(ms) {
+async function sleep(ms) {
   return new Promise((resolve, reject) => setTimeout(resolve, ms));
 }
 
@@ -97,7 +97,7 @@ async function uploadFolderToDriveJob(
           );
         } else {
           console.log("index: " + index)
-          await uploadFileToDriveJob(
+          const file = await uploadFileToDriveJob(
             auth,
             {
               path: `${current_path}/`,
@@ -106,7 +106,9 @@ async function uploadFolderToDriveJob(
             drive_folder_id,
             job
           );
+          console.log(file)
           await sleep(10000);
+          console.log("done sleep")
         }
 
         if (index === files.length - 1 && !isDirectory.sync(`${current_path}/${file_name}`)) {
@@ -189,9 +191,9 @@ Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(fileSizeInBytes)}
       },
       (err, file) => {
         if (err) {
-          resolve(null);
+          return resolve(null);
         } else {
-          resolve(file);
+          return resolve(file);
         }
       }
     );
