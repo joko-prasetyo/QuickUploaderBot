@@ -52,106 +52,86 @@ function sleep(ms) {
   return new Promise((resolve, reject) => setTimeout(resolve, ms));
 }
 
-async function uploadFolder(
+async function uploadFolderToDriveJob(
   auth,
-  folder_id,
+  drive_folder_id,
   current_path = "./torrent-downloaded-files",
-  { message_id, chat_id }
+  { job, done }
 ) {
-  const drive = google.drive({ version: "v3", auth });
-  let isTriggered = false;
-  fs.readdir(current_path, (err, files) => {
-    if (!files.length) return;
-    files.forEach(async (file) => {
-      if (isDirectory.sync(`${current_path}/${file}`)) {
-       await drive.files.create(
-          {
-            resource: {
-              parents: [folder_id],
-              mimeType: "application/vnd.google-apps.folder",
-              name: file,
+  return new Promise((resolve, reject) => {
+    const drive = google.drive({ version: "v3", auth });
+    fs.readdir(current_path, (err, files) => {
+      if (!files.length) return resolve(done ? done(null, {
+        message: "No file found inside torrent!",
+        message_id: job.data.message_id,
+        chat_id: job.data.chat_id,
+      }) : "No file found");
+      files.forEach(async (file_name, index) => {
+        if (isDirectory.sync(`${current_path}/${file}`)) {
+          await drive.files.create({
+              resource: {
+                parents: [drive_folder_id],
+                mimeType: "application/vnd.google-apps.folder",
+                name: file_name,
+              },
+              auth,
             },
-            auth,
-          },
-          (err, folder) => {
-            if (err) return console.log("Something went wrong!");
-            console.log("Folder Created");
-            uploadFolder(auth, folder.id, `${current_path}/${file}`, { message_id, chat_id });
-          }
-        );
-      } else {
-        // upload to google drive
-        const fileMetadata = {
-          name: file,
-          parents: [folder_id],
-        };
-        const media = {
-          mimeType: "application/octet-stream",
-          resumable: true,
-          body: fs.createReadStream(`${current_path}/${file}`),
-        };
-        await drive.files.create(
-          {
-            resource: fileMetadata,
-            media,
-            fields: "id",
-          },
-          (err, data) => {
-            console.log(err);
-            if (err) return bot.sendMessage(chat_id, "Failed to upload file");
-            console.log("File Uploaded!");
-            files_count--;
-          },
-          {
-            onUploadProgress(e) {
-              try {
-                if (!isTriggered) {
-                  isTriggered = true;
-                  setTimeout(() => {
-                    isTriggered = false;
-                  }, 2000);
-                  bot.editMessageText(
-                    `
-Uploading ${file} to your drive...
-                    
-Uploaded: ${filesize(e.bytesRead).toFixed(2)}
+            async (err, folder) => {
+              if (err) return console.log("Something went wrong!");
+              console.log("Folder Created", folder);
+              await uploadFolderToDriveJob(
+                auth,
+                folder,
+                `${current_path}/${file_name}`,
+                { job }
+              );
+            }
+          );
+        } else {
+          await uploadFileToDriveJob(auth, {
+            path: `${current_path}/`,
+            name: file_name,
+          }, drive_folder_id, job);
+          await sleep(10000);
+        }
 
-                      `,
-                    {
-                      message_id,
-                      chat_id,
-                      reply_markup: JSON.stringify({
-                        remove_inline_keyboard: true
-                      }),
-                    }
-                  );
-                }
-              } catch (e) {
-                console.log("Cannot edit message");
-              }
-            },
-          }
-        );
-        await sleep(10000);
-      }
+        if (index === files.length - 1) {
+          resolve(done ? done(null, {
+            message: `
+**Upload completed!**
+          
+You can check your uploaded file in /myfiles
+          
+Thank you for using @QuickUploaderBot`,
+            message_id: job.data.message_id,
+            chat_id: job.data.chat_id,
+          }) : "Folder Uploaded")
+        }
+      });
     });
-  });
+  })
 }
 
-function uploadFile(auth, filename, folderId, { job, done }) {
+function uploadFileToDriveJob(
+  auth,
+  file,
+  drive_folder_id,
+  job
+) {
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
     const fileMetadata = {
-      name: filename,
-      parents: [job.data.current_folder_id],
+      name: file.name,
+      parents: [drive_folder_id],
     };
     let isTrigerred = false;
     const media = {
       mimeType: "application/octet-stream",
       resumable: true,
-      body: fs.createReadStream("./shared/" + filename),
+      body: fs.createReadStream(file.path + file.name),
     };
-    const req = drive.files.create(
+    const fileSizeInBytes = fs.statSync(file.path + file.name)["size"];
+    drive.files.create(
       {
         resource: fileMetadata,
         media,
@@ -167,15 +147,15 @@ function uploadFile(auth, filename, folderId, { job, done }) {
               }, 2000);
               bot.editMessageText(
                 `
-Uploading your file...
+Uploading ${file.name} to drive...
                 
-Upload Progress: ${((e.bytesRead.toString() / job.data.filesize) * 100).toFixed(2)}% 
+Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(2)}% 
                       
-Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(job.data.filesize)}
+Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(fileSizeInBytes)}
                 `,
                 {
                   message_id: job.data.message_id,
-                  chat_id: job.data.chatId,
+                  chat_id: job.data.chat_id,
                   reply_markup: JSON.stringify({
                     inline_keyboard: [
                       [
@@ -196,20 +176,10 @@ Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(job.data.filesize)}
       },
       (err, file) => {
         if (err) {
-          done(new Error("Upload failed!"));
+          resolve(null);
         } else {
-          done(null, {
-            message: `
-**Upload completed!**
-
-You can check your uploaded file in /myfiles
-
-Thank you for using @QuickUploaderBot 
-`,
-            message_id: job.data.message_id,
-            chat_id: job.data.chatId,
-          });
-        }
+          resolve(file);
+        } 
       }
     );
   });
@@ -319,31 +289,34 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     process.env.REDIRECT_URI
   );
   request({ url, encoding: null }, (err, resp, buffer) => {
-    client.add(buffer, {
-      path: torrent_downloaded_files_dir
-    }, (torrent) => {
-      const files = torrent.files;
-      let length = files.length;
-      let current_file;
-      // Stream each file to the disk
-      const interval = setInterval(async () => {
-        const isActive = await job.isActive();
-        if (!isActive) {
-          clearInterval(interval);
-          client.remove(buffer);
-          return done();
-        }
-        if (current_file) {
-          console.log(`
+    client.add(
+      buffer,
+      {
+        path: torrent_downloaded_files_dir,
+      },
+      (torrent) => {
+        const files = torrent.files;
+        let length = files.length;
+        let current_file;
+        // Stream each file to the disk
+        const interval = setInterval(async () => {
+          const isActive = await job.isActive();
+          if (!isActive) {
+            clearInterval(interval);
+            client.remove(buffer);
+            return done();
+          }
+          if (current_file) {
+            console.log(`
           Downloading: ${current_file.name} (${filesize(current_file.size)})
           Download Speed: ${filesize(torrent.downloadSpeed)}/s
           Downloaded: ${filesize(torrent.downloaded)}
           Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
           ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
                   `);
-          bot
-            .editMessageText(
-              `
+            bot
+              .editMessageText(
+                `
 Downloading: ${current_file.name} (${filesize(current_file.size)})
 Download Speed: ${filesize(torrent.downloadSpeed)}/s
 Downloaded: ${filesize(torrent.downloaded)}
@@ -352,83 +325,68 @@ Peers: ${torrent.numPeers}
 Seeders: ${torrent.ratio}
 ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}s
         `,
-              {
-                chat_id,
-                message_id,
-                reply_markup: JSON.stringify({
-                  inline_keyboard: [
-                    [
-                      {
-                        text: "Cancel",
-                        callback_data: `${job.id} cancel-torrent-upload`,
-                      },
+                {
+                  chat_id,
+                  message_id,
+                  reply_markup: JSON.stringify({
+                    inline_keyboard: [
+                      [
+                        {
+                          text: "Cancel",
+                          callback_data: `${job.id} cancel-torrent-upload`,
+                        },
+                      ],
                     ],
-                  ],
-                }),
-              }
-            )
-            .catch((e) => {
-              console.log("Cannot edit message!");
-            });
-        }
-      }, 2000);
-      files.forEach((file) => {
-        const source = file.createReadStream();
-        const destination = fs.createWriteStream(
-          torrent_temp_dir + file.name
-        );
-        source
-          .on("data", () => {
-            current_file = {
-              name: file.name,
-              size: file.length,
-            };
-          })
-          .on("end", () => {
-            // close after all files are saved
-            length -= 1;
-            if (!length) {
-              // Download Finished, Upload all downloaded files to gdrive
-              bot
-            .editMessageText(
-              `
+                  }),
+                }
+              )
+              .catch((e) => {
+                console.log("Cannot edit message!");
+              });
+          }
+        }, 2000);
+        files.forEach((file) => {
+          const source = file.createReadStream();
+          const destination = fs.createWriteStream(
+            torrent_temp_dir + file.name
+          );
+          source
+            .on("data", () => {
+              current_file = {
+                name: file.name,
+                size: file.length,
+              };
+            })
+            .on("end", async () => {
+              // close after all files are saved
+              length -= 1;
+              if (!length) {
+                // Download Finished, Upload all downloaded files to gdrive
+                bot.editMessageText(
+                  `
 Download completed!
 
 Uploading files to your drive...`,
-              {
-                chat_id,
-                message_id,
-              }
-            )
-              clearInterval(interval);
-              oAuth2Client.setCredentials(tokens[0]);
-              fileCounts(torrent_downloaded_files_dir);
-              setInterval(() => {
-                if (!files_count) {
-                  console.log(torrent);
-
-                  done(null, {
-                    message: `
-**Upload completed!**
-            
-Thank you for using @QuickUploaderBot
-            `,
-                    message_id,
+                  {
                     chat_id,
-                  });
-                }
-              }, 1000);
-              uploadFolder(
-                oAuth2Client,
-                user_folder_id,
-                torrent_downloaded_files_dir,
-                { message_id, chat_id }
-              );
-            }
-          })
-          .pipe(destination);
-      });
-    });
+                    message_id,
+                  }
+                );
+                clearInterval(interval);
+                oAuth2Client.setCredentials(tokens[0]);
+                fileCounts(torrent_downloaded_files_dir);
+                await uploadFolderToDriveJob(
+                  oAuth2Client,
+                  user_folder_id,
+                  torrent_downloaded_files_dir,
+                  { job, done }
+                );
+              }
+            })
+            .pipe(destination);
+        });
+      }
+    );
   });
 });
 
@@ -464,14 +422,14 @@ Download Speed: ${filesize(state.speed)}/s
           
 ETA: ${state.time.remaining}s`,
         message_id: job.data.message_id,
-        chat_id: job.data.chatId,
+        chat_id: job.data.chat_id,
       });
     })
     .on("error", function (err) {
       console.log(err, "Something went wrong!");
       done(new Error(err));
     })
-    .on("end", () => {
+    .on("end", async () => {
       if (requested) {
         job.progress({
           message: `
@@ -480,12 +438,24 @@ ETA: ${state.time.remaining}s`,
 Preparing files to upload...
   `,
           message_id: job.data.message_id,
-          chat_id: job.data.chatId,
+          chat_id: job.data.chat_id,
         });
-        uploadFile(oAuth2Client, job.data.filename, "root", {
-          job,
-          done,
-        });
+        const uploaded_file = await uploadFileToDriveJob(oAuth2Client, {
+          name: job.data.filename,
+          path: `${dir}/`
+        }, job.data.current_folder_id, job);
+        if (uploaded_file) {
+          done(null, {
+            message: `
+**Upload completed!**
+          
+You can check your uploaded file in /myfiles
+          
+Thank you for using @QuickUploaderBot`,
+            message_id: job.data.message_id,
+            chat_id: job.data.chat_id,
+          });
+        }
       }
     })
     .pipe(writer);
@@ -506,11 +476,11 @@ uploadTorrentQueue.on("global:completed", async (jobId, data) => {
     .catch(() => {
       console.log("cannot edit message");
     });
-    // Delete all file in torrent-downloaded-files folder
-    rimraf(torrent_downloaded_files_dir, function () { 
-      console.log("done");
-      fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
-    });
+  // Delete all file in torrent-downloaded-files folder
+  rimraf(torrent_downloaded_files_dir, function () {
+    console.log("Directory Emptied!");
+    fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+  });
 });
 
 uploadFileQueue.on(
@@ -550,10 +520,10 @@ uploadFileQueue.on("global:completed", async (jobId, data) => {
       console.log(e.message);
     });
 
-    rimraf(dir, () => {
-      console.log("Directory Emptied!");
-      fs.mkdirSync(dir, { recursive: true });
-    })
+  rimraf(dir, () => {
+    console.log("Directory Emptied!");
+    fs.mkdirSync(dir, { recursive: true });
+  });
 });
 
 uploadFileQueue.on("global:failed", async (jobId, data) => {
@@ -562,7 +532,7 @@ uploadFileQueue.on("global:failed", async (jobId, data) => {
   rmdirAsync(dir, () => {
     console.log("deleted");
     fs.mkdirSync(dir, { recursive: true });
-  })
+  });
 });
 
 function checkFolderOrFileExists(auth, folder_or_file_id) {
@@ -1241,7 +1211,7 @@ For example:  ` +
       .add(
         {
           message_id,
-          chatId: id,
+          chat_id: id,
           url: users[id].upload_info.url,
           filename: users[id].upload_info.filename,
           filesize: users[id].upload_info.filesize,
