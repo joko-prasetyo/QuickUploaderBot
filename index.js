@@ -61,8 +61,6 @@ async function uploadFolderToDriveJob(
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
     fs.readdir(current_path, (err, files) => {
-      console.log(err);
-      console.log(current_path);
       if (!files.length)
         return resolve(
           done
@@ -75,7 +73,7 @@ async function uploadFolderToDriveJob(
         );
       files.forEach(async (file_name, index) => {
         if (isDirectory.sync(`${current_path}/${file_name}`)) {
-          console.log("this is a directory");
+          console.log("this is a directory, index:", index);
           await drive.files.create(
             {
               resource: {
@@ -88,7 +86,7 @@ async function uploadFolderToDriveJob(
             async (err, folder) => {
               console.log(err);
               if (err) return console.log("Something went wrong!");
-              console.log("Folder Created", folder);
+              console.log("Folder Created", folder.id);
               await uploadFolderToDriveJob(
                 auth,
                 folder.id,
@@ -98,6 +96,7 @@ async function uploadFolderToDriveJob(
             }
           );
         } else {
+          console.log("index: " + index)
           await uploadFileToDriveJob(
             auth,
             {
@@ -144,7 +143,6 @@ function uploadFileToDriveJob(auth, file, drive_folder_id, job) {
       resumable: true,
       body: fs.createReadStream(file.path + file.name),
     };
-    console.log(media);
     const fileSizeInBytes = fs.statSync(file.path + file.name)["size"];
     drive.files.create(
       {
@@ -164,9 +162,7 @@ function uploadFileToDriveJob(auth, file, drive_folder_id, job) {
                 `
 Uploading ${file.name} to drive...
                 
-Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(
-                  2
-                )}% 
+Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(2)}% 
                       
 Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(fileSizeInBytes)}
                 `,
@@ -591,10 +587,6 @@ function sendListFiles(auth, chat, fileId = "root", isEdit = false) {
       if (err) return console.log("The API returned an error: " + err);
       const files = res.data.files;
       if (files.length) {
-        // console.log('Files:');
-        // files.map((file) => {
-        //   console.log(`${file.name} (${file.id})`);
-        // });
         const reply_markup = JSON.stringify({
           inline_keyboard:
             fileId !== "root"
@@ -772,7 +764,6 @@ bot.on("message", async (msg) => {
     }
 
     if (msg.document && msg.document.mime_type === "application/x-bittorrent") {
-      console.log(user.tokens[0], users[chatId].current_folder_id);
       oAuth2Client.setCredentials(user.tokens[0]);
       const folderExists = await checkFolderOrFileExists(
         oAuth2Client,
