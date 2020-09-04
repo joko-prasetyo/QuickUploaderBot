@@ -380,7 +380,6 @@ Uploading files to your drive...`,
                 );
                 clearInterval(interval);
                 oAuth2Client.setCredentials(tokens[0]);
-                console.log("done!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
                 await uploadFolderToDriveJob(
                   oAuth2Client,
                   user_folder_id,
@@ -742,6 +741,9 @@ bot.on("message", async (msg) => {
     }
 
     if (msg.document && msg.document.mime_type === "application/x-bittorrent") {
+      oAuth2Client.setCredentials(user.tokens[0]);
+      const folderExists = await checkFolderOrFileExists(oAuth2Client, user.current_folder_id);
+      if (!folderExists) return bot.sendMessage(chatId, "Folder not found! Please select an existing folder to upload!");
       const url = await bot.getFileLink(msg.document.file_id);
       return bot
         .sendMessage(chatId, "Your torrent file has been added to the queue")
