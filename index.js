@@ -85,9 +85,8 @@ async function uploadFolderToDriveJob(
                 auth,
               },
               async (err, folder) => {
-                console.log(err);
                 if (err) return console.log("Something went wrong!");
-                console.log("Folder Created", folder.id);
+                console.log("Folder Created", folder);
                 await uploadFolderToDriveJob(
                   auth,
                   folder.id,
