@@ -779,6 +779,13 @@ bot.on("message", async (msg) => {
     }
 
     if (msg.document && msg.document.mime_type === "application/x-bittorrent") {
+      if (!user.tokens.length) {
+        return bot.sendMessage(
+          chatId,
+          "It seems you haven't authenticate your google account, please type /auth to do that"
+        );
+      }
+
       oAuth2Client.setCredentials(user.tokens[0]);
       const folderExists = await checkFolderOrFileExists(
         oAuth2Client,
@@ -839,7 +846,7 @@ bot.on("message", async (msg) => {
         `
 Welcome to Quick Uploader Bot!
 
-I'm Quick Uploader bot, responsible for uploading files to your google drive storage, you can send a direct download URL and I'll upload it into your google drive storage and send you it's drive link.
+I'm Quick Uploader Bot, responsible for uploading files to your google drive storage, you can send a direct download URL or torrent file and I'll upload it into your google drive storage.
 
 To start the bot, I need to authenticate your account.
 
