@@ -779,7 +779,7 @@ bot.on("message", async (msg) => {
       oAuth2Client.setCredentials(user.tokens[0]);
       const folderExists = await checkFolderOrFileExists(
         oAuth2Client,
-        user.current_folder_id
+        users[chatId].current_folder_id
       );
       if (!folderExists)
         return bot.sendMessage(
