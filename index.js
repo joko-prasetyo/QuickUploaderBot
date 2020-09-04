@@ -60,7 +60,7 @@ async function uploadFolderToDriveJob(
 ) {
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
-    fs.readdir(current_path, (err, files) => {
+    fs.readdir(current_path, async (err, files) => {
       if (!files.length)
         return resolve(
           done
@@ -71,63 +71,65 @@ async function uploadFolderToDriveJob(
               })
             : "No file found"
         );
-      files.forEach(async (file_name, index) => {
-        if (isDirectory.sync(`${current_path}/${file_name}`)) {
-          console.log("this is a directory, index:", index);
-          await drive.files.create(
-            {
-              resource: {
-                parents: [drive_folder_id],
-                mimeType: "application/vnd.google-apps.folder",
+        let index = 0;
+        for (const file_name of files) {
+          if (isDirectory.sync(`${current_path}/${file_name}`)) {
+            console.log("this is a directory, index:", index);
+            await drive.files.create(
+              {
+                resource: {
+                  parents: [drive_folder_id],
+                  mimeType: "application/vnd.google-apps.folder",
+                  name: file_name,
+                },
+                auth,
+              },
+              async (err, folder) => {
+                console.log(err);
+                if (err) return console.log("Something went wrong!");
+                console.log("Folder Created", folder.id);
+                await uploadFolderToDriveJob(
+                  auth,
+                  folder.id,
+                  `${current_path}/${file_name}`,
+                  { job }
+                );
+              }
+            );
+          } else {
+            console.log("index: " + index)
+            const file = await uploadFileToDriveJob(
+              auth,
+              {
+                path: `${current_path}/`,
                 name: file_name,
               },
-              auth,
-            },
-            async (err, folder) => {
-              console.log(err);
-              if (err) return console.log("Something went wrong!");
-              console.log("Folder Created", folder.id);
-              await uploadFolderToDriveJob(
-                auth,
-                folder.id,
-                `${current_path}/${file_name}`,
-                { job }
-              );
-            }
-          );
-        } else {
-          console.log("index: " + index)
-          const file = await uploadFileToDriveJob(
-            auth,
-            {
-              path: `${current_path}/`,
-              name: file_name,
-            },
-            drive_folder_id,
-            job
-          );
-          console.log(file)
-          await sleep(10000);
-          console.log("done sleep")
+              drive_folder_id,
+              job
+            );
+            console.log(file)
+            await sleep(10000);
+            console.log("done sleep")
+          }
+  
+          if (index === files.length - 1 && !isDirectory.sync(`${current_path}/${file_name}`)) {
+            resolve(
+              done
+                ? done(null, {
+                    message: `
+  **Upload completed!**
+            
+  You can check your uploaded file in /myfiles
+            
+  Thank you for using @QuickUploaderBot`,
+                    message_id: job.data.message_id,
+                    chat_id: job.data.chat_id,
+                  })
+                : "Folder Uploaded"
+            );
+          }
+          index++;
         }
-
-        if (index === files.length - 1 && !isDirectory.sync(`${current_path}/${file_name}`)) {
-          resolve(
-            done
-              ? done(null, {
-                  message: `
-**Upload completed!**
-          
-You can check your uploaded file in /myfiles
-          
-Thank you for using @QuickUploaderBot`,
-                  message_id: job.data.message_id,
-                  chat_id: job.data.chat_id,
-                })
-              : "Folder Uploaded"
-          );
-        }
-      });
     });
   });
 }
