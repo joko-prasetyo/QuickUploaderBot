@@ -61,6 +61,7 @@ async function uploadFolderToDriveJob(
   return new Promise((resolve, reject) => {
     const drive = google.drive({ version: "v3", auth });
     fs.readdir(current_path, async (err, files) => {
+      let index = 0;
       if (!files.length)
         return resolve(
           done
@@ -71,10 +72,8 @@ async function uploadFolderToDriveJob(
               })
             : "No file found"
         );
-        let index = 0;
         for (const file_name of files) {
           if (isDirectory.sync(`${current_path}/${file_name}`)) {
-            console.log("this is a directory, index:", index);
             const result = await drive.files.create(
               {
                 resource: {
@@ -84,7 +83,6 @@ async function uploadFolderToDriveJob(
                 },
                 auth,
               });
-            console.log(result.status);
             if (result.data.id) {
               await uploadFolderToDriveJob(
                 auth,
@@ -94,7 +92,6 @@ async function uploadFolderToDriveJob(
               );
             }
           } else {
-            console.log("index: " + index)
             const file = await uploadFileToDriveJob(
               auth,
               {
@@ -104,8 +101,7 @@ async function uploadFolderToDriveJob(
               drive_folder_id,
               job
             );
-            console.log(file)
-            await sleep(10000);
+            await sleep(2000);
             console.log("done sleep");
           }
   
@@ -389,17 +385,12 @@ Uploading files to your drive...`,
                 );
                 clearInterval(interval);
                 oAuth2Client.setCredentials(tokens[0]);
-                const finished = await uploadFolderToDriveJob(
+                await uploadFolderToDriveJob(
                   oAuth2Client,
                   user_folder_id,
                   torrent_downloaded_files_dir,
                   { job, done }
                 );
-
-                if (finished) {
-                  console.log("Finished!");
-                  client.remove(buffer);
-                }
               }
             })
             .pipe(destination);
