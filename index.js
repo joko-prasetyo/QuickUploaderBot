@@ -736,7 +736,6 @@ function showUserStorageQuota(auth) {
       const about = await drive.about.get({
         fields: "storageQuota(*)"
       });
-      console.log(about)
       resolve(about.data.storageQuota);
     } catch (e) {
       resolve(null);
@@ -1269,7 +1268,7 @@ For example:  ` +
     oAuth2Client.setCredentials(users[id].tokens[0]);
     const quota = await showUserStorageQuota(oAuth2Client);
     if (!quota) return bot.sendMessage(id, "Something went wrong! Please try again later.");
-    if (quota.usageInDrive + fileSize > quota.limit) return bot.editMessageText("Insufficient Google Drive Space! You can fix this by deleting some files in your drives.", {
+    if (quota.usageInDrive + users[id].upload_info.filesize > quota.limit) return bot.editMessageText("Insufficient Google Drive Space! You can fix this by deleting some files in your drives.", {
       chat_id: id,
       message_id
     });
