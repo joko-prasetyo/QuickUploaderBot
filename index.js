@@ -17,9 +17,11 @@ const path = require("path");
 const WebTorrent = require("webtorrent");
 const client = new WebTorrent();
 const { OAuth2Client } = require("google-auth-library");
+const shortUrl = require('node-url-shortener');
 const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
 const rimraf = require("rimraf");
+const { chat } = require("googleapis/build/src/apis/chat");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrent-downloaded-files";
 const torrent_temp_dir = "./torrent-temp-files/";
@@ -799,25 +801,17 @@ bot.on("message", async (msg) => {
         if (quota.usageInDrive + torrent.length > quota.limit) {
           bot.sendMessage(chatId, "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.");
         } else {
-          bot.sendMessage(chatId, "Your torrent file has been added to the queue", {
-            reply_markup: JSON.stringify({
-              inline_keyboard: [[{ text: "Cancel", callback_data: " cancel-torrent-upload" }]]
+          shortUrl.short(url, (err, url) => {
+            if (err) return bot.sendMessage(chatId, "Cannot shorten url");
+            bot.sendMessage(chatId, `
+Your torrent file's ready!
+
+File Name: ${torrent.name}
+File Size: ${filesize(torrent.length)}`, {
+              reply_markup: JSON.stringify({
+                inline_keyboard: [[{ text: "Upload Now!", callback_data: `${url} start-torrent` }, { text: "Cancel", callback_data: " cancel" }]]
+              })
             })
-          })
-          .then(({ message_id }) => {
-            uploadTorrentQueue.add(
-              {
-                url,
-                message_id,
-                chat_id: msg.chat.id,
-                user_folder_id: user.current_folder_id,
-                tokens: user.tokens,
-              },
-              {
-                removeOnFail: true,
-                removeOnComplete: true,
-              }
-            );
           });
         }
       })
@@ -971,34 +965,36 @@ File Size: ${filesize(fileSize)}
         access_type: "offline",
         scope: SCOPES,
       });
-      var options = {
-        reply_markup: JSON.stringify({
-          inline_keyboard: [
-            [
-              {
-                text: "Authorize",
-                url: authUrl,
-              },
-              {
-                text: "Cancel",
-                callback_data: " cancel", // Split data between space with format "<data> <action>"
-              },
-            ],
-          ],
-        }),
-      };
-      bot.sendMessage(
-        chatId,
-        `
-To Authorize your google account follow step by step below: 
 
+      bot.sendPhoto(chatId, fs.readFileSync("./src/img/not_verified_1.png"), {
+          caption: `
+If you see this, that means our bot is not verified by Google, To use this bot you must trust our bot, or else you cannot fully access this bot, you can resolve this by clicking the Advanced button then the Open button. You can always remove your google account that is attached to this bot for security reasons. This message might be changed in the future
+
+
+To Authorize your google account follow step by step below: 
+          
 1. Click 'Authorize' button and visit the link
 2. Choose whichever account do you want to use
 3. Allow all permissions to this bot
 4. Copy the verification code and send it to me
-`,
-        options
+          `,
+          reply_markup: JSON.stringify({
+            inline_keyboard: [
+              [
+                {
+                  text: "Authorize",
+                  url: authUrl,
+                },
+                {
+                  text: "Cancel",
+                  callback_data: " cancel", // Split data between space with format "<data> <action>"
+                },
+              ],
+            ],
+          }),
+        }
       );
+
       users[user_id] = {
         ...users[user_id],
         onAuth: true,
@@ -1303,7 +1299,7 @@ For example:  ` +
                 [
                   {
                     text: "Check Queue",
-                    callback_data: `${job.id} check-queue`,
+                    callback_data: `${job.id} check-file-queue`,
                   },
                 ],
               ],
@@ -1342,6 +1338,54 @@ You can always bind your account to our bot by using /auth
     } catch (e) {
       console.log(e.message);
     }
+  } else if (action === "start-torrent") {
+    const uploadTorrentJob = await uploadTorrentQueue.add(
+      {
+        url: data,
+        message_id,
+        chat_id: id,
+        user_folder_id: users[id].current_folder_id,
+        tokens: users[id].tokens,
+      },
+      {
+        removeOnFail: true,
+        removeOnComplete: true,
+      }
+    );
+    bot.editMessageText("Your torrent file has been added to the queue!", {
+      chat_id: id,
+      message_id,
+      reply_markup: JSON.stringify({
+        inline_keyboard: [[{ text: "Check Queue", callback_data: `${uploadTorrentJob.id} check-torrent-queue` }, { text: "Cancel", callback_data: `${uploadTorrentJob.id} cancel-torrent-upload` }]]
+      })
+    });
+  } else if (action === "check-torrent-queue") {
+    let activeJobs = await uploadTorrentQueue.getActive();
+    const waitingJobsCount = await uploadTorrentQueue.getWaitingCount();
+    activeJobs = activeJobs.map((job) => {
+      return {
+        id: job.id,
+        processedOn: new Date(job.processedOn),
+      };
+    });
+
+    let activeJobInfoStr = "Currently this bot is serving queues number: ";
+    activeJobs.forEach((job, index) => {
+      console.log(job.id);
+      if (index === activeJobs.length - 1) activeJobInfoStr += `${job.id}`;
+      else activeJobInfoStr += `${job.id}, `;
+    });
+    console.log(activeJobInfoStr);
+    bot.answerCallbackQuery({
+      callback_query_id: query.id,
+      text: `
+This file is on queue number ${data}
+${activeJobInfoStr}
+
+There're currently ${waitingJobsCount} torrent(s) are waiting to be uploaded
+      `,
+      show_alert: true,
+    });
   } else if (action === "cancel-torrent-upload") {
     try {
       const current_active_job = await uploadTorrentQueue.getJob(data);
@@ -1353,7 +1397,7 @@ You can always bind your account to our bot by using /auth
     } catch (e) {
       console.log(e.message);
     }
-  } else if (action === "check-queue") {
+  } else if (action === "check-file-queue") {
     let activeJobs = await uploadFileQueue.getActive();
     const waitingJobsCount = await uploadFileQueue.getWaitingCount();
     activeJobs = activeJobs.map((job) => {
@@ -1380,5 +1424,11 @@ There're currently ${waitingJobsCount} file(s) are waiting to be uploaded
     });
   }
 });
+
+// Queue Debugging
+// setInterval(async () => {
+//   const jobs = await uploadTorrentQueue.getJobCounts();
+//   console.log(jobs);
+// }, 2000)
 
 server.listen(PORT, () => console.log("Listening on PORT", PORT));
