@@ -291,6 +291,8 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     process.env.CLIENT_SECRET,
     process.env.REDIRECT_URI
   );
+  let timeoutSeconds = 0; // Incremental seconds for timeout
+  const maximumTimeoutSeconds = 1800; // Maximum timeout of Half an hour
   request({ url, encoding: null }, (err, resp, buffer) => {
     client.add(
       buffer,
@@ -302,13 +304,24 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         let length = files.length;
         let current_file;
         // Stream each file to the disk
-        const interval = setInterval(async () => {
+        const interval = setInterval(async () => {          
           const isActive = await job.isActive();
-          if (!isActive) {
+          if (!isActive || timeoutSeconds >= maximumTimeoutSeconds) {
             clearInterval(interval);
             client.remove(buffer);
-            return done();
+            return done(null, {
+              message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
+              message_id,
+              chat_id
+            });
           }
+
+          if (!torrent.downloadSpeed) {
+            timeoutSeconds += 2;
+          } else {
+            timeoutSeconds = 0;
+          }
+
           if (current_file) {
             console.log(`
           Downloading: ${current_file.name} (${filesize(current_file.size)})
@@ -1379,7 +1392,7 @@ You can always bind your account to our bot by using /auth
     bot.answerCallbackQuery({
       callback_query_id: query.id,
       text: `
-This file is on queue number ${data}
+This torrent is on queue number ${data}
 ${activeJobInfoStr}
 
 There're currently ${waitingJobsCount} torrent(s) are waiting to be uploaded
