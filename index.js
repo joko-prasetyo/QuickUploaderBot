@@ -336,9 +336,9 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         let download_path =
         torrent_downloaded_files_dir + "/" +
           file.path
-            .split("\\")
+            .split("/")
             .filter((item) => item != file.name)
-            .join("\\");
+            .join("/");
         console.log(download_path);
         await mkdirp(download_path);
         const writeStream = fs.createWriteStream(torrent_downloaded_files_dir + "/" + file.path);
