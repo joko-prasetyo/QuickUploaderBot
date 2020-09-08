@@ -295,18 +295,18 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   );
   let timeoutSeconds = 0; // Incremental seconds for timeout
   const maximumTimeoutSeconds = 1800; // Maximum timeout of Half an hour
-  let current_download_speed = 0;
-  let streamEnded = false;
+  // let current_download_speed = 0;
+  // let streamEnded = false;
   request({ url, encoding: null }, (err, resp, buffer) => {
-    const { infoHash } = parseTorrent(buffer);
-    const uri = parseTorrent.toMagnetURI({
-      infoHash,
-    });
+    // const { infoHash } = parseTorrent(buffer);
+    // const uri = parseTorrent.toMagnetURI({
+    //   infoHash,
+    // });
 
-    const engine = torrentStream(uri, {
-      path: torrent_downloaded_files_dir,
-      verify: false
-    });
+    // const engine = torrentStream(uri, {
+    //   path: torrent_downloaded_files_dir,
+    //   verify: false
+    // });
 
 //     engine.on("ready", function (e) {
 //       const interval = setInterval(async () => {          
