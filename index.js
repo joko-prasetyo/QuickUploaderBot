@@ -10,7 +10,7 @@ const SCOPES = ["https://www.googleapis.com/auth/drive"];
 const mime = require("mime-types");
 const isUrl = require("is-url");
 const User = require("./src/models/user");
-const parseTorrent = require('parse-torrent')
+const parseTorrent = require('parse-torrent');
 const request = require("request");
 const progress = require("request-progress");
 // const progress_stream = require("progress-stream");
@@ -415,6 +415,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
 //         { job, done }
 //       );
 //     });
+    client.seed(buffer);
     client.add(
       buffer,
       {
