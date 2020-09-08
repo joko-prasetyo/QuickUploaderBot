@@ -396,14 +396,16 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     });
 
     engine.on('idle', async () => {
+      streamEnded = true;
       bot.editMessageText(`
 Download completed!
 
-Uploading files to your drive...`,{
+Uploading files to your drive...`, {
           chat_id,
           message_id,
         }
       );
+      await sleep(5000);
       oAuth2Client.setCredentials(credentials);
       await uploadFolderToDriveJob(
         oAuth2Client,
