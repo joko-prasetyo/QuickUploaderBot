@@ -13,24 +13,24 @@ const User = require("./src/models/user");
 const parseTorrent = require('parse-torrent')
 const request = require("request");
 const progress = require("request-progress");
-const progress_stream = require("progress-stream");
+// const progress_stream = require("progress-stream");
 // const path = require("path");
-// const WebTorrent = require("webtorrent");
-// const client = new WebTorrent();
+const WebTorrent = require("webtorrent");
+const client = new WebTorrent();
 const { OAuth2Client } = require("google-auth-library");
 const shortUrl = require('node-url-shortener');
 const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
 const torrentStream = require("torrent-stream");
 const rimraf = require("rimraf");
-const mkdirp = require("mkdirp");
+// const mkdirp = require("mkdirp");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrent-downloaded-files";
-// const torrent_temp_dir = "./torrent-temp-files/";
+const torrent_temp_dir = "./torrent-temp-files/";
 
 fs.mkdirSync(dir, { recursive: true });
 fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
-// fs.mkdirSync(torrent_temp_dir, { recursive: true });
+fs.mkdirSync(torrent_temp_dir, { recursive: true });
 
 const bot = new TelegramBot(process.env.TOKEN, {
   polling: true,
@@ -308,163 +308,63 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
       verify: false
     });
 
-    engine.on("ready", function (e) {
-      const interval = setInterval(async () => {          
-        if (streamEnded || timeoutSeconds >= maximumTimeoutSeconds) {
-          clearInterval(interval);
-          engine.destroy(() => {
-            engine.remove(false, () => {
-              return done(null, {
-                message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
-                message_id,
-                chat_id
-              });
-            });
-          });
-        }
-
-        if (!current_download_speed) {
-          timeoutSeconds += 2;
-        } else {
-          timeoutSeconds = 0;
-        }
-        console.log(timeoutSeconds);
-      }, 2000);
-      engine.files.forEach(async function (file) {
-        console.log("filename:", file.name + " " + filesize(file.length));
-        const readStream = file.createReadStream();
-        let download_path =
-        torrent_downloaded_files_dir + "/" +
-          file.path
-            .split("/")
-            .filter((item) => item != file.name)
-            .join("/");
-        console.log(download_path);
-        await mkdirp(download_path);
-        const writeStream = fs.createWriteStream(torrent_downloaded_files_dir + "/" + file.path);
-
-        const str = progress_stream({
-          length: file.length,
-          time: 100,
-        });
-
-        str.on("progress", async function (progress) {
-          let isActive = await job.isActive();
-          if (!isActive) {
-            streamEnded = true;
-            return str.end();
-          }
-          current_download_speed = progress.speed;
-          bot
-              .editMessageText(
-                `
-*Downloading*: ` + "`" + file.name + "` (" + filesize(file.length) + ")" + `
-
-*Download Speed*: ${filesize(progress.speed)}/s
-
-*Downloaded*: ${filesize(engine.swarm.downloaded)}
-
-*Percentage Downloaded*: ${(progress.percentage).toFixed(2)}%
-
-*ETA*: ${(progress.eta).toFixed(2)}s
-        `,
-                {
-                  chat_id,
-                  message_id,
-                  parse_mode: "Markdown",
-                  reply_markup: JSON.stringify({
-                    inline_keyboard: [
-                      [
-                        {
-                          text: "Cancel",
-                          callback_data: `${job.id} cancel-torrent-upload`,
-                        },
-                      ],
-                    ],
-                  }),
-                }
-              )
-              .catch((e) => {
-                console.log("Cannot edit message!");
-              });
-        });
-        readStream.pipe(str).pipe(writeStream);        
-        readStream.on("end", () => {
-          console.log(file.name + " Finished Downloading");
-        });
-      });
-    });
-
-    engine.on('idle', async () => {
-      streamEnded = true;
-      bot.editMessageText(`
-Download completed!
-
-Uploading files to your drive...`, {
-          chat_id,
-          message_id,
-        }
-      );
-      await sleep(5000);
-      oAuth2Client.setCredentials(credentials);
-      await uploadFolderToDriveJob(
-        oAuth2Client,
-        user_folder_id,
-        torrent_downloaded_files_dir,
-        { job, done }
-      );
-    });
-//     client.add(
-//       buffer,
-//       {
-//         path: torrent_downloaded_files_dir,
-//       },
-//       (torrent) => {
-//         const files = torrent.files;
-//         let length = files.length;
-//         let current_file;
-//         // Stream each file to the disk
-//         const interval = setInterval(async () => {          
-//           const isActive = await job.isActive();
-//           if (!isActive || timeoutSeconds >= maximumTimeoutSeconds) {
-//             clearInterval(interval);
-//             client.remove(buffer);
-//             return done(null, {
-//               message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
-//               message_id,
-//               chat_id
+//     engine.on("ready", function (e) {
+//       const interval = setInterval(async () => {          
+//         if (streamEnded || timeoutSeconds >= maximumTimeoutSeconds) {
+//           clearInterval(interval);
+//           engine.destroy(() => {
+//             engine.remove(false, () => {
+//               return done(null, {
+//                 message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
+//                 message_id,
+//                 chat_id
+//               });
 //             });
-//           }
+//           });
+//         }
 
-//           if (!torrent.downloadSpeed) {
-//             timeoutSeconds += 2;
-//           } else {
-//             timeoutSeconds = 0;
-//           }
+//         if (!current_download_speed) {
+//           timeoutSeconds += 2;
+//         } else {
+//           timeoutSeconds = 0;
+//         }
+//       }, 2000);
+//       engine.files.forEach(async function (file) {
+//         console.log("filename:", file.name + " " + filesize(file.length));
+//         const readStream = file.createReadStream();
+//         let download_path =
+//         torrent_downloaded_files_dir + "/" +
+//           file.path
+//             .split("/")
+//             .filter((item) => item != file.name)
+//             .join("/");
+//         await mkdirp(download_path)
+//         const writeStream = fs.createWriteStream(torrent_downloaded_files_dir + "/" + file.path);
 
-//           if (current_file) {
-//             console.log(`
-//           Downloading: ${current_file.name} (${filesize(current_file.size)})
-//           Download Speed: ${filesize(torrent.downloadSpeed)}/s
-//           Downloaded: ${filesize(torrent.downloaded)}
-//           Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
-//           ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
-//                   `);
-//             bot
+//         const str = progress_stream({
+//           length: file.length,
+//           time: 100,
+//         });
+
+//         str.on("progress", async function (progress) {
+//           let isActive = await job.isActive();
+//           if (!isActive) {
+//             streamEnded = true;
+//             return str.end();
+//           }
+//           current_download_speed = progress.speed;
+//           bot
 //               .editMessageText(
 //                 `
-// *Downloading*: ` + "`" + current_file.name + "` (" + filesize(current_file.size) + ")" + `
+// *Downloading*: ` + "`" + file.name + "` (" + filesize(file.length) + ")" + `
 
-// *Download Speed*: ${filesize(torrent.downloadSpeed)}/s
+// *Download Speed*: ${filesize(progress.speed)}/s
 
-// *Downloaded*: ${filesize(torrent.downloaded)}
+// *Downloaded*: ${filesize(engine.swarm.downloaded)}
 
-// *Total Downloaded*: ${(torrent.progress * 100).toFixed(2)}%
+// *Percentage Downloaded*: ${(progress.percentage).toFixed(2)}%
 
-// *Peers*: ${torrent.numPeers}
-// *Seeders*: ${torrent.ratio}
-
-// *ETA*: ${(torrent.timeRemaining / 1000).toFixed(2)}s
+// *ETA*: ${(progress.eta).toFixed(2)}s
 //         `,
 //                 {
 //                   chat_id,
@@ -485,49 +385,150 @@ Uploading files to your drive...`, {
 //               .catch((e) => {
 //                 console.log("Cannot edit message!");
 //               });
-//           }
-//         }, 2000);
-//         files.forEach((file) => {
-//           const source = file.createReadStream();
-//           const destination = fs.createWriteStream(
-//             torrent_temp_dir + file.name
-//           );
-//           source
-//             .on("data", () => {
-//               current_file = {
-//                 name: file.name,
-//                 size: file.length,
-//               };
-//             })
-//             .on("end", async () => {
-//               // close after all files are saved
-//               length -= 1;
-//               if (!length) {
-//                 // Download Finished, Upload all downloaded files to gdrive
-//                 bot.editMessageText(
-//                   `
+//         });
+//         readStream.pipe(str).pipe(writeStream);        
+//         readStream.on("end", () => {
+//           console.log(file.name + " Finished Downloading");
+//         });
+//       });
+//     });
+
+//     engine.on('idle', async () => {
+//       console.log("All Download Finished!");
+//       streamEnded = true;
+//       bot.editMessageText(`
 // Download completed!
 
-// Uploading files to your drive...`,
-//                   {
-//                     chat_id,
-//                     message_id,
-//                   }
-//                 );
-//                 clearInterval(interval);
-//                 oAuth2Client.setCredentials(credentials);
-//                 await uploadFolderToDriveJob(
-//                   oAuth2Client,
-//                   user_folder_id,
-//                   torrent_downloaded_files_dir,
-//                   { job, done }
-//                 );
-              // }
-//             })
-//             .pipe(destination);
-//         });
-//       }
-//     );
+// Uploading files to your drive...`, {
+//           chat_id,
+//           message_id,
+//         }
+//       ).catch(() => {
+//         console.log("Cannot edit message!");
+//       });
+//       await sleep(5000);
+//       oAuth2Client.setCredentials(credentials);
+//       await uploadFolderToDriveJob(
+//         oAuth2Client,
+//         user_folder_id,
+//         torrent_downloaded_files_dir,
+//         { job, done }
+//       );
+//     });
+    client.add(
+      buffer,
+      {
+        path: torrent_downloaded_files_dir,
+      },
+      (torrent) => {
+        const files = torrent.files;
+        let length = files.length;
+        let current_file;
+        // Stream each file to the disk
+        const interval = setInterval(async () => {          
+          const isActive = await job.isActive();
+          if (!isActive || timeoutSeconds >= maximumTimeoutSeconds) {
+            clearInterval(interval);
+            client.remove(buffer);
+            return done(null, {
+              message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
+              message_id,
+              chat_id
+            });
+          }
+
+          if (!torrent.downloadSpeed) {
+            timeoutSeconds += 2;
+          } else {
+            timeoutSeconds = 0;
+          }
+
+          if (current_file) {
+            console.log(`
+          Downloading: ${current_file.name} (${filesize(current_file.size)})
+          Download Speed: ${filesize(torrent.downloadSpeed)}/s
+          Downloaded: ${filesize(torrent.downloaded)}
+          Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
+          ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
+                  `);
+            bot
+              .editMessageText(
+                `
+*Downloading*: ` + "`" + current_file.name + "` (" + filesize(current_file.size) + ")" + `
+
+*Download Speed*: ${filesize(torrent.downloadSpeed)}/s
+
+*Downloaded*: ${filesize(torrent.downloaded)}
+
+*Total Downloaded*: ${(torrent.progress * 100).toFixed(2)}%
+
+*Peers*: ${torrent.numPeers}
+*Seeders*: ${torrent.ratio}
+
+*ETA*: ${(torrent.timeRemaining / 1000).toFixed(2)}s
+        `,
+                {
+                  chat_id,
+                  message_id,
+                  parse_mode: "Markdown",
+                  reply_markup: JSON.stringify({
+                    inline_keyboard: [
+                      [
+                        {
+                          text: "Cancel",
+                          callback_data: `${job.id} cancel-torrent-upload`,
+                        },
+                      ],
+                    ],
+                  }),
+                }
+              )
+              .catch((e) => {
+                console.log("Cannot edit message!");
+              });
+          }
+        }, 2000);
+        files.forEach((file) => {
+          const source = file.createReadStream();
+          const destination = fs.createWriteStream(
+            torrent_temp_dir + file.name
+          );
+          source
+            .on("data", () => {
+              current_file = {
+                name: file.name,
+                size: file.length,
+              };
+            })
+            .on("end", async () => {
+              // close after all files are saved
+              length -= 1;
+              if (!length) {
+                // Download Finished, Upload all downloaded files to gdrive
+                bot.editMessageText(
+                  `
+Download completed!
+
+Uploading files to your drive...`,
+                  {
+                    chat_id,
+                    message_id,
+                  }
+                );
+                clearInterval(interval);
+                oAuth2Client.setCredentials(credentials);
+                await uploadFolderToDriveJob(
+                  oAuth2Client,
+                  user_folder_id,
+                  torrent_downloaded_files_dir,
+                  { job, done }
+                );
+              }
+            })
+            .pipe(destination);
+        });
+      }
+    );
   });
 });
 
