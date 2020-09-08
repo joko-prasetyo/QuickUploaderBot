@@ -32,8 +32,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "root"
     },
-    selected_drive: {
-      type: String
+    selected_credentials_index: {
+      type: Number,
+      default: 0
     },
     username: {
       type: String,
