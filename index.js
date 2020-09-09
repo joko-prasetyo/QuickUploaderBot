@@ -10,14 +10,14 @@ const SCOPES = ["https://www.googleapis.com/auth/drive"];
 const mime = require("mime-types");
 const isUrl = require("is-url");
 const User = require("./src/models/user");
-const parseTorrent = require('parse-torrent');
+const parseTorrent = require("parse-torrent");
 const request = require("request");
 const progress = require("request-progress");
 const progress_stream = require("progress-stream");
 // const path = require("path");
 const WebTorrent = require("webtorrent");
 const { OAuth2Client } = require("google-auth-library");
-const shortUrl = require('node-url-shortener');
+const shortUrl = require("node-url-shortener");
 const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
 const torrentStream = require("torrent-stream");
@@ -63,57 +63,56 @@ async function uploadFolderToDriveJob(
               })
             : "No file found"
         );
-        for (const file_name of files) {
-          if (isDirectory.sync(`${current_path}/${file_name}`)) {
-            const result = await drive.files.create(
-              {
-                resource: {
-                  parents: [drive_folder_id],
-                  mimeType: "application/vnd.google-apps.folder",
-                  name: file_name,
-                },
-                auth,
-              });
-            if (result.data.id) {
-              await uploadFolderToDriveJob(
-                auth,
-                result.data.id,
-                `${current_path}/${file_name}`,
-                { job }
-              );
-            }
-          } else {
-            const file = await uploadFileToDriveJob(
+      for (const file_name of files) {
+        if (isDirectory.sync(`${current_path}/${file_name}`)) {
+          const result = await drive.files.create({
+            resource: {
+              parents: [drive_folder_id],
+              mimeType: "application/vnd.google-apps.folder",
+              name: file_name,
+            },
+            auth,
+          });
+          if (result.data.id) {
+            await uploadFolderToDriveJob(
               auth,
-              {
-                path: `${current_path}/`,
-                name: file_name,
-              },
-              drive_folder_id,
-              job
+              result.data.id,
+              `${current_path}/${file_name}`,
+              { job }
             );
-            await sleep(2000);
-            console.log("done sleep");
           }
-  
-          if (index === files.length - 1) {
-            resolve(
-              done
-                ? done(null, {
-                    message: `
+        } else {
+          const file = await uploadFileToDriveJob(
+            auth,
+            {
+              path: `${current_path}/`,
+              name: file_name,
+            },
+            drive_folder_id,
+            job
+          );
+          await sleep(2000);
+          console.log("done sleep");
+        }
+
+        if (index === files.length - 1) {
+          resolve(
+            done
+              ? done(null, {
+                  message: `
 **Upload completed!**
             
 You can check your uploaded file in /myfiles
             
 Thank you for using @QuickUploaderBot`,
-                    message_id: job.data.message_id,
-                    chat_id: job.data.chat_id,
-                  })
-                : "Folder Uploaded"
-            );
-          }
-          index++;
+                  message_id: job.data.message_id,
+                  chat_id: job.data.chat_id,
+                })
+              : "Folder Uploaded"
+          );
         }
+        index++;
+      }
     });
   });
 }
@@ -294,8 +293,6 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   let timeoutSeconds = 0; // Incremental seconds for timeout
   const maximumTimeoutSeconds = 1800; // Maximum timeout of Half an hour
   // let current_download_speed = 0;
-  let processing = true;
-
   request({ url, encoding: null }, (err, resp, buffer) => {
     const client = new WebTorrent();
     client.add(
@@ -304,20 +301,46 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         path: torrent_downloaded_files_dir
       },
       (torrent) => {
-        const files = torrent.files;
-        let length = files.length;
-        let current_file;
+        // const files = torrent.files;
+        // let length = files.length;
+        
         // Stream each file to the disk
-        const interval = setInterval(async () => {          
+        const interval = setInterval(async () => {
+          const processing = await job.isActive();
           if (!processing || timeoutSeconds >= maximumTimeoutSeconds) {
             console.log("completing job");
             clearInterval(interval);
+            client.remove(buffer);
             client.destroy();
             return done(null, {
-              message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
+              message:
+                "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
               message_id,
-              chat_id
+              chat_id,
             });
+          }
+
+          if (torrent.done) {
+            bot.editMessageText(
+              `
+Download completed!
+
+Uploading files to your drive...`,
+              {
+                chat_id,
+                message_id,
+              }
+            ).catch(() => {
+              console.log("Cannot edit message");
+            });
+            clearInterval(interval);
+            oAuth2Client.setCredentials(credentials);
+            await uploadFolderToDriveJob(
+              oAuth2Client,
+              user_folder_id,
+              torrent_downloaded_files_dir,
+              { job, done }
+            );
           }
 
           if (!torrent.downloadSpeed) {
@@ -326,112 +349,37 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
             timeoutSeconds = 0;
           }
 
-          if (current_file) {
-            console.log(`
-          Downloading: ${current_file.name} (${filesize(current_file.size)})
-          Download Speed: ${filesize(torrent.downloadSpeed)}/s
-          Downloaded: ${filesize(torrent.downloaded)}
-          Total Downloaded: ${(torrent.progress * 100).toFixed(2)}%
-          ETA: ${(torrent.timeRemaining / 1000).toFixed(2)}
-                  `);
-            bot
-              .editMessageText(
-                `
-*Downloading*: ` + "`" + current_file.name + "` (" + filesize(current_file.size) + ")" + `
+          bot.editMessageText(
+              `
+*Downloading*: ` + "`" + torrent.name + "` (" +filesize(torrent.length) + ")" + `
 
 *Download Speed*: ${filesize(torrent.downloadSpeed)}/s
 *Downloaded*: ${filesize(torrent.downloaded)}
 *Total Downloaded*: ${(torrent.progress * 100).toFixed(2)}%
 *Peers*: ${torrent.numPeers}
-*Ratio*: ${torrent.ratio}
+*Ratio*: ${torrent.ratio.toFixed(3)}
 
-*ETA*: ${(torrent.timeRemaining / 1000).toFixed(2)}s
-        `,
-                {
-                  chat_id,
-                  message_id,
-                  parse_mode: "Markdown",
-                  reply_markup: JSON.stringify({
-                    inline_keyboard: [
-                      [
-                        {
-                          text: "Cancel",
-                          callback_data: `${job.id} cancel-torrent-upload`,
-                        },
-                      ],
+*ETA*: ${(torrent.timeRemaining / 1000).toFixed(2)} Seconds`,
+              {
+                chat_id,
+                message_id,
+                parse_mode: "Markdown",
+                reply_markup: JSON.stringify({
+                  inline_keyboard: [
+                    [
+                      {
+                        text: "Cancel",
+                        callback_data: `${job.id} cancel-torrent-upload`,
+                      },
                     ],
-                  }),
-                }
-              )
-              .catch((e) => {
-                console.log("Cannot edit message!");
-              });
-          }
+                  ],
+                }),
+              }
+            )
+            .catch((e) => {
+              console.log("Cannot edit message!");
+            });
         }, 2000);
-        files.forEach((file) => {
-          const source = file.createReadStream();
-          const destination = fs.createWriteStream((torrent_downloaded_files_dir + "/" + file.path).split("\\").join("/"));
-          const str = progress_stream({
-            length: file.length,
-            time: 100,
-          });
-            
-          str.on("progress", async () => {
-            let isActive = await job.isActive();
-              if (!isActive) {
-                processing = false;
-                return str.end();
-              }
-          });
-
-          source
-            .pipe(str)
-            .on("data", async () => {
-              current_file = {
-                name: file.name,
-                size: file.length,
-              };
-            })
-            .on("end", async () => {
-              // close after all files are saved
-              console.log("end");
-              destination.end();
-              source.removeAllListeners();
-              length -= 1;
-              if (!length && processing) {
-                // Download Finished, Upload all downloaded files to gdrive
-                bot.editMessageText(
-                  `
-Download completed!
-
-Uploading files to your drive...`,
-                  {
-                    chat_id,
-                    message_id,
-                  }
-                ).catch(() => {
-                  console.log("Cannot edit message");
-                });
-                clearInterval(interval);
-                oAuth2Client.setCredentials(credentials);
-                await uploadFolderToDriveJob(
-                  oAuth2Client,
-                  user_folder_id,
-                  torrent_downloaded_files_dir,
-                  { job, done }
-                );
-              } else if (!length) {
-                bot.editMessageText("Action cancelled successfully!",{
-                    chat_id,
-                    message_id,
-                  }
-                ).catch(() => {
-                  console.log("Cannot edit message");
-                });
-              }
-            })
-            .pipe(destination);
-        });
       }
     );
   });
@@ -463,13 +411,15 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         message: `
 *Download Progress*: ${(state.percent * 100).toFixed(2)}% 
           
-*Downloaded*: ${filesize(state.size.transferred)} of ${filesize(state.size.total)}
+*Downloaded*: ${filesize(state.size.transferred)} of ${filesize(
+          state.size.total
+        )}
           
 *Download Speed*: ${filesize(state.speed)}/s
           
 *ETA*: ${state.time.remaining}s`,
         message_id: job.data.message_id,
-        chat_id: job.data.chat_id
+        chat_id: job.data.chat_id,
       });
     })
     .on("error", function (err) {
@@ -509,10 +459,11 @@ Thank you for using @QuickUploaderBot`,
           });
         } else {
           done(null, {
-            message: "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.",
+            message:
+              "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.",
             message_id: job.data.message_id,
             chat_id: job.data.chat_id,
-          })
+          });
         }
       }
     })
@@ -775,7 +726,7 @@ function showUserStorageQuota(auth) {
     try {
       const drive = google.drive({ version: "v3", auth });
       const about = await drive.about.get({
-        fields: "storageQuota(*)"
+        fields: "storageQuota(*)",
       });
       resolve(about.data.storageQuota);
     } catch (e) {
@@ -789,7 +740,7 @@ function showUserInfo(auth) {
     try {
       const drive = google.drive({ version: "v3", auth });
       const info = await drive.about.get({
-        fields: "user(*)"
+        fields: "user(*)",
       });
       resolve(info.data.user);
     } catch (e) {
@@ -846,29 +797,52 @@ bot.on("message", async (msg) => {
         oAuth2Client,
         users[chatId].current_folder_id
       );
-      if (!folderExists) return bot.sendMessage(chatId, "Folder not found! Please select an existing folder to upload!");
+      if (!folderExists)
+        return bot.sendMessage(
+          chatId,
+          "Folder not found! Please select an existing folder to upload!"
+        );
       const url = await bot.getFileLink(msg.document.file_id);
       const quota = await showUserStorageQuota(oAuth2Client);
-      if (!quota) return bot.sendMessage(chatId, "Something went wrong! Please try again later.");
+      if (!quota)
+        return bot.sendMessage(
+          chatId,
+          "Something went wrong! Please try again later."
+        );
       request({ url, encoding: null }, (err, resp, buffer) => {
         const torrent = parseTorrent(buffer);
         if (quota.usageInDrive + torrent.length > quota.limit) {
-          bot.sendMessage(chatId, "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.");
+          bot.sendMessage(
+            chatId,
+            "Insufficient Google Drive Space! You can fix this by deleting some files in your drives."
+          );
         } else {
           shortUrl.short(url, (err, url) => {
             if (err) return bot.sendMessage(chatId, "Cannot shorten url");
-            bot.sendMessage(chatId, `
+            bot.sendMessage(
+              chatId,
+              `
 Your torrent file's ready!
 
 File Name: ${torrent.name}
-File Size: ${filesize(torrent.length)}`, {
-              reply_markup: JSON.stringify({
-                inline_keyboard: [[{ text: "Upload Now!", callback_data: `${url} start-torrent` }, { text: "Cancel", callback_data: " cancel" }]]
-              })
-            })
+File Size: ${filesize(torrent.length)}`,
+              {
+                reply_markup: JSON.stringify({
+                  inline_keyboard: [
+                    [
+                      {
+                        text: "Upload Now!",
+                        callback_data: `${url} start-torrent`,
+                      },
+                      { text: "Cancel", callback_data: " cancel" },
+                    ],
+                  ],
+                }),
+              }
+            );
           });
         }
-      })
+      });
       return;
     }
 
@@ -1021,7 +995,7 @@ File Size: ${filesize(fileSize)}
       });
 
       bot.sendPhoto(chatId, fs.readFileSync("./src/img/not_verified_1.png"), {
-          caption: `
+        caption: `
 If you see this, that means our bot is not verified by Google, To use this bot you must trust our bot, or else you cannot fully access this bot, you can resolve this by clicking the Advanced button then the Open button. You can always remove your google account that is attached to this bot for security reasons. This message might be changed in the future
 
 
@@ -1032,22 +1006,21 @@ To Authorize your google account follow step by step below:
 3. Allow all permissions to this bot
 4. Copy the verification code and send it to me
           `,
-          reply_markup: JSON.stringify({
-            inline_keyboard: [
-              [
-                {
-                  text: "Authorize",
-                  url: authUrl,
-                },
-                {
-                  text: "Cancel",
-                  callback_data: " cancel", // Split data between space with format "<data> <action>"
-                },
-              ],
+        reply_markup: JSON.stringify({
+          inline_keyboard: [
+            [
+              {
+                text: "Authorize",
+                url: authUrl,
+              },
+              {
+                text: "Cancel",
+                callback_data: " cancel", // Split data between space with format "<data> <action>"
+              },
             ],
-          }),
-        }
-      );
+          ],
+        }),
+      });
 
       users[user_id] = {
         ...users[user_id],
@@ -1063,22 +1036,35 @@ To Authorize your google account follow step by step below:
       oAuth2Client.setCredentials(user.tokens[selected_credentials_index]);
       sendListFiles(oAuth2Client, { id: user_id });
     } else if (msg.text.toLowerCase() === "/mydrive") {
-      if (!user.tokens.length) return bot.sendMessage(chatId, "It seems you haven't authenticate your google account, please type /auth to do that");
+      if (!user.tokens.length)
+        return bot.sendMessage(
+          chatId,
+          "It seems you haven't authenticate your google account, please type /auth to do that"
+        );
       let accounts = [];
       let account_index = 0;
       for (const token of user.tokens) {
         oAuth2Client.setCredentials(token);
         const info = await showUserInfo(oAuth2Client);
-        accounts.push([{ text: `${info.emailAddress} ${selected_credentials_index === account_index ? "✅" : ""}`, callback_data: `${account_index} choose-drive` }]);
+        accounts.push([
+          {
+            text: `${info.emailAddress} ${
+              selected_credentials_index === account_index ? "✅" : ""
+            }`,
+            callback_data: `${account_index} choose-drive`,
+          },
+        ]);
         account_index++;
       }
 
       bot.sendMessage(chatId, "Choose Your Drive to Manage", {
         reply_markup: JSON.stringify({
-          inline_keyboard: [...accounts, [{ text: "Close", callback_data: " cancel"}]]
-        })
+          inline_keyboard: [
+            ...accounts,
+            [{ text: "Close", callback_data: " cancel" }],
+          ],
+        }),
       });
-      
     } else if (msg.text.toLowerCase() === "/myprofile") {
       bot.sendMessage(
         chatId,
@@ -1212,9 +1198,10 @@ If you want to change upload directory type /myfiles and click '📤 Upload here
       `
 To upload file please type  /upload <url-file> 
 
-For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
-` The Link should be ended with extention file for example .zip, .rar, .apk, .exe and make sure that the file size is not too large with maximum of 100GB`,
-{ parse_mode: "Markdown" }
+For example:  ` +
+        "`/upload http://speedtest.tele2.net/10GB.zip`" +
+        ` The Link should be ended with extention file for example .zip, .rar, .apk, .exe and make sure that the file size is not too large with maximum of 100GB`,
+      { parse_mode: "Markdown" }
     );
   } else if (action === "folder") {
     oAuth2Client.setCredentials(users[id].credentials);
@@ -1330,11 +1317,19 @@ For example:  ` + "`/upload http://speedtest.tele2.net/10GB.zip`" +
   } else if (action === "start") {
     oAuth2Client.setCredentials(users[id].credentials);
     const quota = await showUserStorageQuota(oAuth2Client);
-    if (!quota) return bot.sendMessage(id, "Something went wrong! Please try again later.");
-    if (quota.usageInDrive + users[id].upload_info.filesize > quota.limit) return bot.editMessageText("Insufficient Google Drive Space! You can fix this by deleting some files in your drives.", {
-      chat_id: id,
-      message_id
-    });
+    if (!quota)
+      return bot.sendMessage(
+        id,
+        "Something went wrong! Please try again later."
+      );
+    if (quota.usageInDrive + users[id].upload_info.filesize > quota.limit)
+      return bot.editMessageText(
+        "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.",
+        {
+          chat_id: id,
+          message_id,
+        }
+      );
     const file_or_folder_exists = await checkFolderOrFileExists(
       oAuth2Client,
       users[id].current_folder_id
@@ -1423,8 +1418,19 @@ You can always bind your account to our bot by using /auth
       chat_id: id,
       message_id,
       reply_markup: JSON.stringify({
-        inline_keyboard: [[{ text: "Check Queue", callback_data: `${uploadTorrentJob.id} check-torrent-queue` }, { text: "Cancel", callback_data: `${uploadTorrentJob.id} cancel-torrent-upload` }]]
-      })
+        inline_keyboard: [
+          [
+            {
+              text: "Check Queue",
+              callback_data: `${uploadTorrentJob.id} check-torrent-queue`,
+            },
+            {
+              text: "Cancel",
+              callback_data: `${uploadTorrentJob.id} cancel-torrent-upload`,
+            },
+          ],
+        ],
+      }),
     });
   } else if (action === "check-torrent-queue") {
     let activeJobs = await uploadTorrentQueue.getActive();
@@ -1490,17 +1496,25 @@ There're currently ${waitingJobsCount} file(s) are waiting to be uploaded
       show_alert: true,
     });
   } else if (action === "choose-drive") {
-    await User.updateOne({ telegram_user_id: id }, { $set: { selected_credentials_index: data } }, (err) => {
-      if (err) return bot.editMessageText("Something went wrong, Cannot select drive account!", {
-        chat_id: id,
-        message_id
-      });
+    await User.updateOne(
+      { telegram_user_id: id },
+      { $set: { selected_credentials_index: data } },
+      (err) => {
+        if (err)
+          return bot.editMessageText(
+            "Something went wrong, Cannot select drive account!",
+            {
+              chat_id: id,
+              message_id,
+            }
+          );
 
-      bot.editMessageText("Successfully selected drive account!", {
-        chat_id: id,
-        message_id
-      });
-    });
+        bot.editMessageText("Successfully selected drive account!", {
+          chat_id: id,
+          message_id,
+        });
+      }
+    );
   }
 });
 
