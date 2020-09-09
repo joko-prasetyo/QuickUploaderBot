@@ -92,7 +92,7 @@ async function uploadFolderToDriveJob(
             job
           );
           await sleep(2000);
-          console.log("done sleep");
+          console.log("Done Sleep");
         }
 
         if (index === files.length - 1) {
@@ -131,7 +131,6 @@ function uploadFileToDriveJob(auth, file, drive_folder_id, job) {
       body: fs.createReadStream(file.path + file.name),
     };
     const fileSizeInBytes = fs.statSync(file.path + file.name)["size"];
-    console.log(fileSizeInBytes);
     drive.files.create(
       {
         resource: fileMetadata,
@@ -291,7 +290,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     process.env.REDIRECT_URI
   );
   let timeoutSeconds = 0; // Incremental seconds for timeout
-  const maximumTimeoutSeconds = 1800; // Maximum timeout of Half an hour
+  const maximumTimeoutSeconds = 3600; // Maximum timeout of Half an hour
   // let current_download_speed = 0;
   request({ url, encoding: null }, (err, resp, buffer) => {
     const client = new WebTorrent();
@@ -314,7 +313,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
             client.destroy();
             return done(null, {
               message:
-                "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
+                "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 1 hour. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
               message_id,
               chat_id,
             });
