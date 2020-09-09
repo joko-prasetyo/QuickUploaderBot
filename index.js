@@ -293,16 +293,39 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   const maximumTimeoutSeconds = 3600; // Maximum timeout of Half an hour
   // let current_download_speed = 0;
   request({ url, encoding: null }, (err, resp, buffer) => {
-    const client = new WebTorrent();
-    client.add(
-      buffer,
+    const client = new WebTorrent({
+      tracker: true
+    });
+    client.add("magnet:?xt=urn:btih:17B8F91F71019F24F4DF7E4C1941032E9AAA9C96&dn=%5bFreeCourseSite.com%5d%20Udemy%20-%20NestJS%20Zero%20to%20Hero%20-%20Modern%20TypeScript%20Back-end%20Development&tr=udp%3a%2f%2fzephir.monocul.us%3a6969%2fannounce&tr=udp%3a%2f%2ftracker.torrent.eu.org%3a451%2fannounce&tr=http%3a%2f%2ftracker.ipv6tracker.ru%3a80%2fannounce&tr=udp%3a%2f%2fretracker.hotplug.ru%3a2710%2fannounce&tr=udp%3a%2f%2ftracker.birkenwald.de%3a6969%2fannounce&tr=udp%3a%2f%2ftorrentclub.tech%3a6969%2fannounce&tr=udp%3a%2f%2ftracker.filepit.to%3a6969%2fannounce&tr=http%3a%2f%2fopentracker.h4ck.me%3a6969%2fannounce&tr=http%3a%2f%2fgwp2-v19.rinet.ru%3a80%2fannounce&tr=udp%3a%2f%2fbigfoot1942.sektori.org%3a6969%2fannounce&tr=http%3a%2f%2ftracker.files.fm%3a6969%2fannounce&tr=http%3a%2f%2fretracker.joxnet.ru%3a80%2fannounce&tr=http%3a%2f%2ftracker.moxing.party%3a6969%2fannounce&tr=udp%3a%2f%2fretracker.lanta-net.ru%3a2710%2fannounce&tr=udp%3a%2f%2fthetracker.org%3a80%2fannounce&tr=http%3a%2f%2ftorrent.nwps.ws%3a80%2fannounce&tr=udp%3a%2f%2ftracker.iamhansen.xyz%3a2000%2fannounce&tr=https%3a%2f%2ftracker.vectahosting.eu%3a2053%2fannounce&tr=https%3a%2f%2ftracker.parrotsec.org%3a443%2fannounce&tr=udp%3a%2f%2ftracker.supertracker.net%3a1337%2fannounce&tr=udp%3a%2f%2fcarapax.net%3a6969%2fannounce&tr=udp%3a%2f%2fxxx.xx-x.ga%3a53%2fannounce&tr=udp%3a%2f%2fretracker.maxnet.ua%3a80%2fannounce&tr=udp%3a%2f%2ftracker.uw0.xyz%3a6969%2fannounce&tr=udp%3a%2f%2fretracker.netbynet.ru%3a2710%2fannounce&tr=http%3a%2f%2fbt-tracker.gamexp.ru%3a2710%2fannounce&tr=udp%3a%2f%2ftracker.filemail.com%3a6969%2fannounce&tr=udp%3a%2f%2fbt.dy20188.com%3a80%2fannounce&tr=udp%3a%2f%2fexplodie.org%3a6969%2fannounce&tr=udp%3a%2f%2fretracker.baikal-telecom.net%3a2710%2fannounce&tr=udp%3a%2f%2fretracker.akado-ural.ru%3a80%2fannounce&tr=udp%3a%2f%2fdenis.stalker.upeer.me%3a6969%2fannounce&tr=udp%3a%2f%2ftracker.coppersurfer.tk%3a6969%2fannounce&tr=udp%3a%2f%2fopen.demonii.si%3a1337%2fannounce&tr=http%3a%2f%2ft.nyaatracker.com%3a80%2fannounce&tr=udp%3a%2f%2fexodus.des",
       {
+        announce: [
+          'udp://tracker.coppersurfer.tk:6969/announce',
+          'http://tracker.opentrackr.org:1337/announce',
+          'udp://tracker.leechers-paradise.org:6969/announce',
+          'udp://p4p.arenabg.ch:1337/announce',
+          'udp://9.rarbg.to:2710/announce',
+          'udp://9.rarbg.me:2710/announce',
+          'udp://exodus.desync.com:6969/announce',
+          'udp://tracker.cyberia.is:6969/announce',
+          'udp://tracker.tiny-vps.com:6969/announce',
+          'udp://retracker.lanta-net.ru:2710/announce',
+          'udp://open.stealth.si:80/announce',
+          'udp://tracker.torrent.eu.org:451/announce',
+          'udp://tracker.moeking.me:6969/announce',
+          'http://tracker4.itzmx.com:2710/announce',
+          'udp://tracker3.itzmx.com:6961/announce',
+          'http://tracker1.itzmx.com:8080/announce',
+          'udp://ipv4.tracker.harry.lu:80/announce',
+          'udp://bt2.archive.org:6969/announce',
+          'udp://bt1.archive.org:6969/announce',
+          'udp://retracker.akado-ural.ru:80/announce',
+        ],
         path: torrent_downloaded_files_dir
       },
       (torrent) => {
         // const files = torrent.files;
         // let length = files.length;
-        
+        console.log(torrent.announce);
         // Stream each file to the disk
         const interval = setInterval(async () => {
           const processing = await job.isActive();

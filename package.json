@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "bittorrent-tracker": "^9.15.0",
     "bull": "^3.18.0",
     "compression": "^1.7.4",
     "countdown": "^2.6.0",
