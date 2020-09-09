@@ -415,7 +415,6 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
 //         { job, done }
 //       );
 //     });
-    client.seed(buffer);
     client.add(
       buffer,
       {
@@ -503,6 +502,8 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
             })
             .on("end", async () => {
               // close after all files are saved
+              source.unpipe(destination);
+              destination.end();
               length -= 1;
               if (!length) {
                 // Download Finished, Upload all downloaded files to gdrive
