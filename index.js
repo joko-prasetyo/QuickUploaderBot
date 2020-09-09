@@ -296,7 +296,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     const client = new WebTorrent({
       tracker: true
     });
-    client.add("magnet:?xt=urn:btih:7428BD62676B48BC71CDC936D01398A54C99C74D&dn=%5bFreeCourseLab.me%5d%20Udemy%20-%20Go%20%28Golang%29%20The%20Complete%20Bootcamp&tr=http%3a%2f%2f0d.kebhana.mx%3a80%2fannounce&tr=udp%3a%2f%2ftw.opentracker.ga%3a36920%2fannounce&tr=udp%3a%2f%2ftemp1.opentracker.gq%3a6969%2fannounce&tr=udp%3a%2f%2ftemp2.opentracker.gq%3a6969%2fannounce&tr=udp%3a%2f%2ftracker.torrent.eu.org%3a451%2fannounce&tr=http%3a%2f%2ftorrent.nwps.ws%3a80%2fannounce&tr=udp%3a%2f%2fexplodie.org%3a6969%2fannounce&tr=https%3a%2f%2fopentracker.xyz%3a443%2fannounce&tr=https%3a%2f%2ft.quic.ws%3a443%2fannounce&tr=https%3a%2f%2ftracker.fastdownload.xyz%3a443%2fannounce&tr=udp%3a%2f%2ftracker.opentrackr.org%3a1337%2fannounce&tr=udp%3a%2f%2fipv4.tracker.harry.lu%3a80%2fannounce&tr=udp%3a%2f%2ftracker.coppersurfer.tk%3a6969%2fannounce&tr=udp%3a%2f%2ftracker.justseed.it%3a1337%2fannounce&tr=udp%3a%2f%2fopen.demonii.si%3a1337%2fannounce",
+    client.add(buffer,
       {
         announce: [
           'udp://public.popcorn-tracker.org:6969/announce',
