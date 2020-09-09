@@ -126,3 +126,122 @@ fs.readFile('credentials.json', (err, content) => {
   // Authorize a client with credentials, then call the Google Drive API.
   authorize(JSON.parse(content), uploadFile);
 });
+
+
+    // const { infoHash } = parseTorrent(buffer);
+    // const uri = parseTorrent.toMagnetURI({
+    //   infoHash,
+    // });
+
+    // const engine = torrentStream(uri, {
+    //   path: torrent_downloaded_files_dir,
+    //   verify: false
+    // });
+
+//     engine.on("ready", function (e) {
+//       const interval = setInterval(async () => {          
+//         if (streamEnded || timeoutSeconds >= maximumTimeoutSeconds) {
+//           clearInterval(interval);
+//           engine.destroy(() => {
+//             engine.remove(false, () => {
+//               return done(null, {
+//                 message: "Sorry, Our bot canceled the process, because the torrent stayed on a download speed of 0 kb for 30 mins. Remember that not all torrents are working properly, sometimes the torrent might be very slow to download or broken. To resolve this please choose higher torrent seeders or choose another torrent.",
+//                 message_id,
+//                 chat_id
+//               });
+//             });
+//           });
+//         }
+
+//         if (!current_download_speed) {
+//           timeoutSeconds += 2;
+//         } else {
+//           timeoutSeconds = 0;
+//         }
+//       }, 2000);
+//       engine.files.forEach(async function (file) {
+//         console.log("filename:", file.name + " " + filesize(file.length));
+//         const readStream = file.createReadStream();
+//         let download_path =
+//         torrent_downloaded_files_dir + "/" +
+//           file.path
+//             .split("/")
+//             .filter((item) => item != file.name)
+//             .join("/");
+//         await mkdirp(download_path)
+//         const writeStream = fs.createWriteStream(torrent_downloaded_files_dir + "/" + file.path);
+
+//         const str = progress_stream({
+//           length: file.length,
+//           time: 100,
+//         });
+
+//         str.on("progress", async function (progress) {
+          // let isActive = await job.isActive();
+          // if (!isActive) {
+          //   streamEnded = true;
+          //   return str.end();
+          // }
+//           current_download_speed = progress.speed;
+//           bot
+//               .editMessageText(
+//                 `
+// *Downloading*: ` + "`" + file.name + "` (" + filesize(file.length) + ")" + `
+
+// *Download Speed*: ${filesize(progress.speed)}/s
+
+// *Downloaded*: ${filesize(engine.swarm.downloaded)}
+
+// *Percentage Downloaded*: ${(progress.percentage).toFixed(2)}%
+
+// *ETA*: ${(progress.eta).toFixed(2)}s
+//         `,
+//                 {
+//                   chat_id,
+//                   message_id,
+//                   parse_mode: "Markdown",
+//                   reply_markup: JSON.stringify({
+//                     inline_keyboard: [
+//                       [
+//                         {
+//                           text: "Cancel",
+//                           callback_data: `${job.id} cancel-torrent-upload`,
+//                         },
+//                       ],
+//                     ],
+//                   }),
+//                 }
+//               )
+//               .catch((e) => {
+//                 console.log("Cannot edit message!");
+//               });
+//         });
+//         readStream.pipe(str).pipe(writeStream);        
+//         readStream.on("end", () => {
+//           console.log(file.name + " Finished Downloading");
+//         });
+//       });
+//     });
+
+//     engine.on('idle', async () => {
+//       console.log("All Download Finished!");
+//       streamEnded = true;
+//       bot.editMessageText(`
+// Download completed!
+
+// Uploading files to your drive...`, {
+//           chat_id,
+//           message_id,
+//         }
+//       ).catch(() => {
+//         console.log("Cannot edit message!");
+//       });
+//       await sleep(5000);
+//       oAuth2Client.setCredentials(credentials);
+//       await uploadFolderToDriveJob(
+//         oAuth2Client,
+//         user_folder_id,
+//         torrent_downloaded_files_dir,
+//         { job, done }
+//       );
+//     });
