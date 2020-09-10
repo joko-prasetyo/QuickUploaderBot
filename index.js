@@ -15,12 +15,13 @@ const request = require("request");
 const progress = require("request-progress");
 const progress_stream = require("progress-stream");
 // const path = require("path");
+const got = require("got");
+const fileType = require("file-type");
 const WebTorrent = require("webtorrent");
 const { OAuth2Client } = require("google-auth-library");
 const shortUrl = require("node-url-shortener");
 const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
-const torrentStream = require("torrent-stream");
 const rimraf = require("rimraf");
 // const mkdirp = require("mkdirp");
 const dir = "./shared";
@@ -1092,66 +1093,63 @@ Use /auth command to authenticate your account!
       if (!isUrl(url)) {
         return bot.sendMessage(chatId, "Invalid url, please try again!");
       }
-      request({ url, method: "HEAD" }, async (err, response, body) => {
-        const fileSize = response.headers["content-length"];
-        console.log(response.headers);
-        const extension = mime.extension(response.headers["content-type"]);
-        if (err)
-          return bot.sendMessage(
+      const stream = got.stream(url);
+      const res = await got.head(url);
+      console.log(res.headers); 
+      const filetype = await fileType.fromStream(stream) || { ext: mime.extension(res.headers['content-type']), mime: res.headers['content-type'] };
+      const fileSize = res.headers["content-length"];
+      const limit = 107374182400;
+      if (fileSize <= limit) {
+        const filename =
+          url
+            .split("/")
+            .pop()
+            .split("#")[0]
+            .split("?")[0]
+            .replace("." + filetype.ext, "") + `.${filetype.ext}`;
+        await bot
+          .sendMessage(
             chatId,
-            "URL might be broken! Please try again later."
-          );
-        const limit = 107374182400;
-        if (fileSize <= limit) {
-          const filename =
-            url
-              .split("/")
-              .pop()
-              .split("#")[0]
-              .split("?")[0]
-              .replace("." + extension, "") + `.${extension}`;
-          await bot
-            .sendMessage(
-              chatId,
-              `
+            `
 Well done! Your file is ready!
 
 File Name: ${filename}
 File Size: ${filesize(fileSize)}
+
+Note: The name of file can be changed sometimes
 `,
-              {
-                reply_markup: JSON.stringify({
-                  inline_keyboard: [
-                    [
-                      {
-                        text: "Upload now!",
-                        callback_data: " start",
-                      },
-                      {
-                        text: "Cancel",
-                        callback_data: " cancel", // Split data between space with format "<data> <action>"
-                      },
-                    ],
+            {
+              reply_markup: JSON.stringify({
+                inline_keyboard: [
+                  [
+                    {
+                      text: "Upload now!",
+                      callback_data: " start",
+                    },
+                    {
+                      text: "Cancel",
+                      callback_data: " cancel", // Split data between space with format "<data> <action>"
+                    },
                   ],
-                }),
-              }
-            )
-            .then((data) => {
-              users[user_id] = {
-                ...users[user_id],
-                upload_info: {
-                  url,
-                  filename,
-                  filesize: fileSize,
-                },
-              };
-            });
-        } else
-          bot.sendMessage(
-            chatId,
-            "Failed to upload, the file you wanted to upload was too big! Please choose file with size lesser than 100GB"
-          );
-      });
+                ],
+              }),
+            }
+          )
+          .then((data) => {
+            users[user_id] = {
+              ...users[user_id],
+              upload_info: {
+                url,
+                filename,
+                filesize: fileSize,
+              },
+            };
+          });
+      } else
+        bot.sendMessage(
+          chatId,
+          "Failed to upload, the file you wanted to upload was too big! Please choose file with size lesser than 100GB"
+        );
     } else if (msg.text.toLowerCase() === "/auth") {
       const authUrl = oAuth2Client.generateAuthUrl({
         access_type: "offline",
