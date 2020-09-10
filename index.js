@@ -1094,6 +1094,7 @@ Use /auth command to authenticate your account!
       }
       request({ url, method: "HEAD" }, async (err, response, body) => {
         const fileSize = response.headers["content-length"];
+        console.log(response.headers);
         const extension = mime.extension(response.headers["content-type"]);
         if (err)
           return bot.sendMessage(
