@@ -293,17 +293,17 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   let timeoutSeconds = 0; // Incremental seconds for timeout
   const maximumTimeoutSeconds = 3600; // Maximum timeout of Half an hour
   // let current_download_speed = 0;
-  // const tracker_response = await got.get("https://newtrackon.com/api/stable");
-  // const announce = tracker_response.body.split("\n\n");
+  const tracker_response = await got.get("https://newtrackon.com/api/stable");
+  const announce = tracker_response.body.split("\n\n");
   request({ url, encoding: null }, (err, resp, buffer) => {
     const client = new WebTorrent({
-      tracker: false
+      tracker: true
     });
     const parsed = parseTorrent(buffer);
     const magnetURI = parseTorrent.toMagnetURI(parsed);
     client.add(magnetURI,
       {
-        // announce,
+        announce,
         path: torrent_downloaded_files_dir
       },
       (torrent) => {
