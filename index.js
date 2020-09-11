@@ -13,7 +13,7 @@ const User = require("./src/models/user");
 const parseTorrent = require("parse-torrent");
 const request = require("request");
 const progress = require("request-progress");
-const progress_stream = require("progress-stream");
+// const progress_stream = require("progress-stream");
 // const path = require("path");
 const got = require("got");
 const fileType = require("file-type");
@@ -296,10 +296,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   const tracker_response = await got.get("https://newtrackon.com/api/stable");
   const announce = tracker_response.body.split("\n\n");
   request({ url, encoding: null }, (err, resp, buffer) => {
-    const client = new WebTorrent({
-      tracker: true,
-      private: false
-    });
+    const client = new WebTorrent();
     const parsed = parseTorrent(buffer);
     const magnetURI = parseTorrent.toMagnetURI(parsed);
     client.add(magnetURI,
@@ -1493,7 +1490,7 @@ There're currently ${waitingJobsCount} torrent(s) are waiting to be uploaded
           message_id
         });
       }
-      await current_active_job.moveToFailed(new Error(`Action Canceled Successfully!_${message_id}_${id}`));
+      await current_active_job.moveToFailed(new Error(`Action Cancelled Successfully!_${message_id}_${id}`));
     } catch (e) {
       console.log(e.message);
     }
