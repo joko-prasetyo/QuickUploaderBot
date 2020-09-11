@@ -17,7 +17,7 @@ const progress = require("request-progress");
 // const path = require("path");
 const got = require("got");
 const fileType = require("file-type");
-const WebTorrent = require("webtorrent-hybrid");
+const WebTorrent = require("webtorrent");
 const { OAuth2Client } = require("google-auth-library");
 const shortUrl = require("node-url-shortener");
 const PORT = process.env.PORT || 3000;
@@ -306,6 +306,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
       },
       (torrent) => {
         const interval = setInterval(async () => {
+          console.log(client.downloadSpeed);
           const processing = await job.isActive();
           if (!processing || timeoutSeconds >= maximumTimeoutSeconds) {
             console.log("completing job");
