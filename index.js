@@ -17,7 +17,7 @@ const progress_stream = require("progress-stream");
 // const path = require("path");
 const got = require("got");
 const fileType = require("file-type");
-const WebTorrent = require("webtorrent");
+const WebTorrent = require("webtorrent-hybrid");
 const { OAuth2Client } = require("google-auth-library");
 const shortUrl = require("node-url-shortener");
 const PORT = process.env.PORT || 3000;
@@ -26,9 +26,6 @@ const rimraf = require("rimraf");
 // const mkdirp = require("mkdirp");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrent-downloaded-files";
-
-const DHT = require('bittorrent-dht')
-const magnet = require('magnet-uri')
 
 fs.mkdirSync(dir, { recursive: true });
 fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
@@ -300,7 +297,8 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   const announce = tracker_response.body.split("\n\n");
   request({ url, encoding: null }, (err, resp, buffer) => {
     const client = new WebTorrent({
-      tracker: true
+      tracker: true,
+      private: false
     });
     const parsed = parseTorrent(buffer);
     const magnetURI = parseTorrent.toMagnetURI(parsed);
