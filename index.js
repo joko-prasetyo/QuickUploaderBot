@@ -296,7 +296,9 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   const tracker_response = await got.get("https://newtrackon.com/api/stable");
   const announce = tracker_response.body.split("\n\n");
   request({ url, encoding: null }, (err, resp, buffer) => {
-    const client = new WebTorrent();
+    const client = new WebTorrent({
+      tracker: true
+    });
     const parsed = parseTorrent(buffer);
     const magnetURI = parseTorrent.toMagnetURI(parsed);
     client.add(magnetURI,
