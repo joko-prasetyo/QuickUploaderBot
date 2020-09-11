@@ -293,8 +293,8 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   let timeoutSeconds = 0; // Incremental seconds for timeout
   const maximumTimeoutSeconds = 3600; // Maximum timeout of Half an hour
   // let current_download_speed = 0;
-  const tracker_response = await got.get("https://newtrackon.com/api/stable");
-  const announce = tracker_response.body.split("\n\n");
+  // const tracker_response = await got.get("https://newtrackon.com/api/stable");
+  // const announce = tracker_response.body.split("\n\n");
   request({ url, encoding: null }, (err, resp, buffer) => {
     const client = new WebTorrent({
       tracker: true
@@ -303,14 +303,10 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     const magnetURI = parseTorrent.toMagnetURI(parsed);
     client.add(magnetURI,
       {
-        announce,
+        // announce,
         path: torrent_downloaded_files_dir
       },
       (torrent) => {
-        // const files = torrent.files;
-        // let length = files.length;
-        // console.log(torrent.announce);
-        // Stream each file to the disk
         const interval = setInterval(async () => {
           const processing = await job.isActive();
           if (!processing || timeoutSeconds >= maximumTimeoutSeconds) {
@@ -479,6 +475,28 @@ Thank you for using @QuickUploaderBot`,
 uploadTorrentQueue.on("global:completed", async (jobId, data) => {
   console.log("Upload Torrent Job Completed!");
   const { message_id, chat_id, message } = JSON.parse(data);
+  await bot
+    .editMessageText(message, {
+      message_id,
+      chat_id,
+      reply_markup: JSON.stringify({
+        remove_inline_keyboard: true,
+      }),
+      parse_mode: "Markdown",
+    })
+    .catch(() => {
+      console.log("cannot edit message");
+    });
+  // Delete all file in torrent-downloaded-files folder
+  rimraf(torrent_downloaded_files_dir, function () {
+    console.log("Directory Emptied!");
+    fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+  });
+});
+
+uploadTorrentQueue.on("global:failed", async (jobId, data) => {
+  console.log("Upload Torrent Job Completed!");
+  const [message, message_id, chat_id] = data.split("_");
   await bot
     .editMessageText(message, {
       message_id,
@@ -965,7 +983,7 @@ Note: The name of file can be changed sometimes
                 inline_keyboard: [
                   [
                     {
-                      text: "Upload now!",
+                      text: "Upload Now!",
                       callback_data: " start",
                     },
                     {
@@ -1466,11 +1484,15 @@ There're currently ${waitingJobsCount} torrent(s) are waiting to be uploaded
   } else if (action === "cancel-torrent-upload") {
     try {
       const current_active_job = await uploadTorrentQueue.getJob(data);
-      await current_active_job.moveToCompleted({
-        message: `Action cancelled successfully!`,
-        message_id,
-        chat_id: id,
-      });
+      await current_active_job.discard();
+      if (await current_active_job.isWaiting()) {
+        await current_active_job.remove();
+        return bot.editMessageText("Your torrent has been removed from the queue!", {
+          chat_id: id,
+          message_id
+        });
+      }
+      await current_active_job.moveToFailed(new Error(`Action Canceled Successfully!_${message_id}_${id}`));
     } catch (e) {
       console.log(e.message);
     }
