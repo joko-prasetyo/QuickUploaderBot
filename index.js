@@ -23,9 +23,11 @@ const shortUrl = require("node-url-shortener");
 const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
 const rimraf = require("rimraf");
+const mkdirp = require("mkdirp");
+const { v4: uuidv4 } = require("uuid")
 // const mkdirp = require("mkdirp");
 const dir = "./shared";
-const torrent_downloaded_files_dir = "./torrent-downloaded-files";
+const torrent_downloaded_files_dir = "./torrents";
 
 fs.mkdirSync(dir, { recursive: true });
 fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
@@ -150,7 +152,9 @@ function uploadFileToDriveJob(auth, file, drive_folder_id, job) {
                 `
 Uploading ${file.name} to drive...
                 
-Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(2)}% 
+Upload Progress: ${((e.bytesRead.toString() / fileSizeInBytes) * 100).toFixed(
+                  2
+                )}% 
                       
 Uploaded: ${filesize(e.bytesRead.toString())} of ${filesize(fileSizeInBytes)}
                 `,
@@ -280,11 +284,10 @@ function insertFolder(auth, folder, chat_id, message_id) {
   );
 }
 
-const MAXIMUM_CONCURRENCY_WORKER = 1;
-let current_job_id;
+const MAXIMUM_CONCURRENCY_WORKER = 5;
 uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   console.log("Job is starting");
-  const { url, message_id, chat_id, user_folder_id, credentials } = job.data;
+  const { message_id, chat_id, user_folder_id, credentials, url, identifier } = job.data;
   const oAuth2Client = new OAuth2Client(
     process.env.CLIENT_ID,
     process.env.CLIENT_SECRET,
@@ -295,25 +298,24 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   // let current_download_speed = 0;
   const tracker_response = await got.get("https://newtrackon.com/api/stable");
   const announce = tracker_response.body.split("\n\n");
-  request({ url, encoding: null }, (err, resp, buffer) => {
+  parseTorrent.remote(url, async (err, parsed) => {
+    if (err) throw err;
+    const magnet_uri = parseTorrent.toMagnetURI(parsed);
     const client = new WebTorrent({
-      tracker: true
+      tracker: true,
     });
-    const parsed = parseTorrent(buffer);
-    const magnetURI = parseTorrent.toMagnetURI(parsed);
-    client.add(magnetURI,
-      {
+    await mkdirp(`${torrent_downloaded_files_dir}/${identifier}`);
+    client.add(magnet_uri,{
         announce,
-        path: torrent_downloaded_files_dir
+        path: `${torrent_downloaded_files_dir}/${identifier}`,
       },
       (torrent) => {
         const interval = setInterval(async () => {
-          console.log(client.downloadSpeed);
           const processing = await job.isActive();
           if (!processing || timeoutSeconds >= maximumTimeoutSeconds) {
             console.log("completing job");
             clearInterval(interval);
-            client.remove(buffer);
+            client.remove(magnet_uri);
             client.destroy();
             return done(null, {
               message:
@@ -325,23 +327,24 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
 
           if (torrent.done) {
             bot.editMessageText(
-              `
+                `
 Download completed!
-
+  
 Uploading files to your drive...`,
-              {
-                chat_id,
-                message_id,
-              }
-            ).catch(() => {
-              console.log("Cannot edit message");
-            });
+                {
+                  chat_id,
+                  message_id,
+                }
+              )
+              .catch(() => {
+                console.log("Cannot edit message");
+              });
             clearInterval(interval);
             oAuth2Client.setCredentials(credentials);
             await uploadFolderToDriveJob(
               oAuth2Client,
               user_folder_id,
-              torrent_downloaded_files_dir,
+              `${torrent_downloaded_files_dir}/${identifier}`,
               { job, done }
             );
           }
@@ -352,16 +355,17 @@ Uploading files to your drive...`,
             timeoutSeconds = 0;
           }
 
-          bot.editMessageText(
+          bot
+            .editMessageText(
               `
-*Downloading*: ` + "`" + torrent.name + "` (" +filesize(torrent.length) + ")" + `
-
+*Downloading*: ` + "`" + torrent.name + "` (" + filesize(torrent.length) + ")" + `
+  
 *Download Speed*: ${filesize(torrent.downloadSpeed)}/s
 *Downloaded*: ${filesize(torrent.downloaded)}
 *Total Downloaded*: ${(torrent.progress * 100).toFixed(2)}%
 *Peers*: ${torrent.numPeers}
 *Ratio*: ${torrent.ratio.toFixed(3)}
-
+  
 *ETA*: ${(torrent.timeRemaining / 1000).toFixed(2)} Seconds`,
               {
                 chat_id,
@@ -390,15 +394,16 @@ Uploading files to your drive...`,
 
 uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   current_job_id = job.id;
-
+  const { chat_id, message_id, filename, credentials, current_folder_id, url } = job.data;
   const oAuth2Client = new OAuth2Client(
     process.env.CLIENT_ID,
     process.env.CLIENT_SECRET,
     process.env.REDIRECT_URI
   );
-  oAuth2Client.setCredentials(job.data.credentials);
-  const writer = fs.createWriteStream("./shared/" + job.data.filename);
-  const req = request(job.data.url);
+  oAuth2Client.setCredentials(credentials);
+  await mkdirp(`${dir}/${chat_id}/`);
+  const writer = fs.createWriteStream(`${dir}/${chat_id}/${filename}`);
+  const req = request(url);
   let requested = true;
   progress(req)
     .on("progress", async function (state) {
@@ -414,15 +419,13 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         message: `
 *Download Progress*: ${(state.percent * 100).toFixed(2)}% 
           
-*Downloaded*: ${filesize(state.size.transferred)} of ${filesize(
-          state.size.total
-        )}
+*Downloaded*: ${filesize(state.size.transferred)} of ${filesize(state.size.total)}
           
 *Download Speed*: ${filesize(state.speed)}/s
           
 *ETA*: ${state.time.remaining}s`,
-        message_id: job.data.message_id,
-        chat_id: job.data.chat_id,
+        message_id,
+        chat_id,
       });
     })
     .on("error", function (err) {
@@ -436,16 +439,15 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
 *Download completed!*
   
 Preparing files to upload...`,
-          message_id: job.data.message_id,
-          chat_id: job.data.chat_id,
+          message_id,
+          chat_id,
         });
         const uploaded_file = await uploadFileToDriveJob(
-          oAuth2Client,
-          {
-            name: job.data.filename,
-            path: `${dir}/`,
+          oAuth2Client, {
+            name: filename,
+            path: `${dir}/${chat_id}/`,
           },
-          job.data.current_folder_id,
+          current_folder_id,
           job
         );
         console.log(uploaded_file);
@@ -457,15 +459,15 @@ Preparing files to upload...`,
 You can check your uploaded file in /myfiles
           
 Thank you for using @QuickUploaderBot`,
-            message_id: job.data.message_id,
-            chat_id: job.data.chat_id,
+            message_id,
+            chat_id,
           });
         } else {
           done(null, {
             message:
               "Insufficient Google Drive Space! You can fix this by deleting some files in your drives.",
-            message_id: job.data.message_id,
-            chat_id: job.data.chat_id,
+            message_id,
+            chat_id,
           });
         }
       }
@@ -475,7 +477,7 @@ Thank you for using @QuickUploaderBot`,
 
 uploadTorrentQueue.on("global:completed", async (jobId, data) => {
   console.log("Upload Torrent Job Completed!");
-  const { message_id, chat_id, message } = JSON.parse(data);
+  const { message_id, chat_id, message, identifier } = JSON.parse(data);
   await bot
     .editMessageText(message, {
       message_id,
@@ -489,15 +491,14 @@ uploadTorrentQueue.on("global:completed", async (jobId, data) => {
       console.log("cannot edit message");
     });
   // Delete all file in torrent-downloaded-files folder
-  rimraf(torrent_downloaded_files_dir, function () {
-    console.log("Directory Emptied!");
-    fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+  rimraf(`${torrent_downloaded_files_dir}/${identifier}`, function () {
+    console.log(`User Directory with ID: ${identifier} has been removed!`);
   });
 });
 
 uploadTorrentQueue.on("global:failed", async (jobId, data) => {
   console.log("Upload Torrent Job Completed!");
-  const [message, message_id, chat_id] = data.split("_");
+  const [identifier, message, message_id, chat_id] = data.split("_");
   await bot
     .editMessageText(message, {
       message_id,
@@ -511,9 +512,8 @@ uploadTorrentQueue.on("global:failed", async (jobId, data) => {
       console.log("cannot edit message");
     });
   // Delete all file in torrent-downloaded-files folder
-  rimraf(torrent_downloaded_files_dir, function () {
-    console.log("Directory Emptied!");
-    fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+  rimraf(`${torrent_downloaded_files_dir}/${identifier}`, function () {
+    console.log(`User Directory with ID: ${identifier} has been removed!`);
   });
 });
 
@@ -956,8 +956,11 @@ Use /auth command to authenticate your account!
       }
       const stream = got.stream(url);
       const res = await got.head(url);
-      console.log(res.headers); 
-      const filetype = await fileType.fromStream(stream) || { ext: mime.extension(res.headers['content-type']), mime: res.headers['content-type'] };
+      console.log(res.headers);
+      const filetype = (await fileType.fromStream(stream)) || {
+        ext: mime.extension(res.headers["content-type"]),
+        mime: res.headers["content-type"],
+      };
       const fileSize = res.headers["content-length"];
       const limit = 107374182400;
       if (fileSize <= limit) {
@@ -1427,6 +1430,7 @@ You can always bind your account to our bot by using /auth
     const uploadTorrentJob = await uploadTorrentQueue.add(
       {
         url: data,
+        identifier: uuidv4(),
         message_id,
         chat_id: id,
         user_folder_id: users[id].current_folder_id,
@@ -1488,12 +1492,17 @@ There're currently ${waitingJobsCount} torrent(s) are waiting to be uploaded
       await current_active_job.discard();
       if (await current_active_job.isWaiting()) {
         await current_active_job.remove();
-        return bot.editMessageText("Your torrent has been removed from the queue!", {
-          chat_id: id,
-          message_id
-        });
+        return bot.editMessageText(
+          "Your torrent has been removed from the queue!",
+          {
+            chat_id: id,
+            message_id,
+          }
+        );
       }
-      await current_active_job.moveToFailed(new Error(`Action Cancelled Successfully!_${message_id}_${id}`));
+      await current_active_job.moveToFailed(
+        new Error(`${current_active_job.data.identifier}_Action Cancelled Successfully!_${message_id}_${id}`)
+      );
     } catch (e) {
       console.log(e.message);
     }
