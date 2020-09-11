@@ -297,7 +297,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   // const announce = tracker_response.body.split("\n\n");
   request({ url, encoding: null }, (err, resp, buffer) => {
     const client = new WebTorrent({
-      tracker: true
+      tracker: false
     });
     const parsed = parseTorrent(buffer);
     const magnetURI = parseTorrent.toMagnetURI(parsed);
@@ -488,10 +488,10 @@ uploadTorrentQueue.on("global:completed", async (jobId, data) => {
       console.log("cannot edit message");
     });
   // Delete all file in torrent-downloaded-files folder
-  rimraf(torrent_downloaded_files_dir, function () {
-    console.log("Directory Emptied!");
-    fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
-  });
+  // rimraf(torrent_downloaded_files_dir, function () {
+  //   console.log("Directory Emptied!");
+  //   fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+  // });
 });
 
 uploadTorrentQueue.on("global:failed", async (jobId, data) => {
@@ -510,10 +510,10 @@ uploadTorrentQueue.on("global:failed", async (jobId, data) => {
       console.log("cannot edit message");
     });
   // Delete all file in torrent-downloaded-files folder
-  rimraf(torrent_downloaded_files_dir, function () {
-    console.log("Directory Emptied!");
-    fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
-  });
+  // rimraf(torrent_downloaded_files_dir, function () {
+  //   console.log("Directory Emptied!");
+  //   fs.mkdirSync(torrent_downloaded_files_dir, { recursive: true });
+  // });
 });
 
 uploadFileQueue.on(
