@@ -6,7 +6,7 @@ const Queue = require("bull");
 const filesize = require("filesize");
 const TelegramBot = require("node-telegram-bot-api");
 const { google } = require("googleapis");
-const SCOPES = ["'https://www.googleapis.com/auth/drive"];
+const SCOPES = ["https://www.googleapis.com/auth/drive"];
 const mime = require("mime-types");
 const isUrl = require("is-url");
 const User = require("./src/models/user");
@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 3000;
 const isDirectory = require("is-directory");
 const rimraf = require("rimraf");
 const mkdirp = require("mkdirp");
-const { v4: uuidv4 } = require("uuid")
+const { v4: uuidv4 } = require("uuid");
 // const mkdirp = require("mkdirp");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrents";
@@ -1020,7 +1020,7 @@ Note: The name of file can be changed sometimes
         scope: SCOPES,
       });
 
-      bot.sendPhoto(chatId, fs.readFileSync("./src/img/not_verified_1.png"), {
+      bot.sendPhoto(chatId, fs.readFileSync("./static/img/not_verified_1.png"), {
         caption: `
 If you see this, that means our bot is not verified by Google, To use this bot you must trust our bot, or else you cannot fully access this bot, you can resolve this by clicking the Advanced button then the Open button. You can always remove your google account that is attached to this bot for security reasons. This message might be changed in the future
 
@@ -1554,10 +1554,15 @@ There're currently ${waitingJobsCount} file(s) are waiting to be uploaded
   }
 });
 
-// Queue Debugging
+// Debugging
 // setInterval(async () => {
-//   const jobs = await uploadTorrentQueue.getJobCounts();
-//   console.log(jobs);
+//   // const jobs = await uploadTorrentQueue.getJobCounts();
+//   // console.log(jobs);
+//   const used = process.memoryUsage();
+//   for (let key in used) {
+//     console.log(`${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB`);
+//   }
+//   console.log("\n");
 // }, 2000)
 
 server.listen(PORT, () => console.log("Listening on PORT", PORT));
