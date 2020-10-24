@@ -8,7 +8,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const { google } = require("googleapis");
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 const mime = require("mime-types");
-const isUrl = require("is-url");
+const isUrl = require("./src/fixtures/is-url");
 const User = require("./src/models/user");
 const parseTorrent = require("parse-torrent");
 const request = require("request");
@@ -25,6 +25,7 @@ const isDirectory = require("is-directory");
 const rimraf = require("rimraf");
 const mkdirp = require("mkdirp");
 const { v4: uuidv4 } = require("uuid");
+const { chat } = require("googleapis/build/src/apis/chat");
 // const mkdirp = require("mkdirp");
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrents";
@@ -294,7 +295,7 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
     process.env.REDIRECT_URI
   );
   let timeoutSeconds = 0; // Incremental seconds for timeout
-  const maximumTimeoutSeconds = 3600; // Maximum timeout of Half an hour
+  const maximumTimeoutSeconds = 3600; // Maximum idle download timeout of an hour
   // let current_download_speed = 0;
   const tracker_response = await got.get("https://newtrackon.com/api/stable");
   const announce = tracker_response.body.split("\n\n");
@@ -310,11 +311,11 @@ uploadTorrentQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
         path: `${torrent_downloaded_files_dir}/${identifier}`,
       },
       (torrent) => {
-        const interval = setInterval(async () => {
+        const torrent_progress_interval = setInterval(async () => {
           const processing = await job.isActive();
           if (!processing || timeoutSeconds >= maximumTimeoutSeconds) {
             console.log("completing job");
-            clearInterval(interval);
+            clearInterval(torrent_progress_interval);
             client.remove(magnet_uri);
             client.destroy();
             return done(null, {
@@ -339,7 +340,7 @@ Uploading files to your drive...`,
               .catch(() => {
                 console.log("Cannot edit message");
               });
-            clearInterval(interval);
+            clearInterval(torrent_progress_interval);
             oAuth2Client.setCredentials(credentials);
             await uploadFolderToDriveJob(
               oAuth2Client,
@@ -405,34 +406,49 @@ uploadFileQueue.process(MAXIMUM_CONCURRENCY_WORKER, async (job, done) => {
   const writer = fs.createWriteStream(`${dir}/${chat_id}/${filename}`);
   const req = request(url);
   let requested = true;
+
+  let downloaded_percentage = 0;
+  let downloaded_size = 0;
+  let total_size = 0;
+  let download_speed = 0;
+  let eta = 0;
+  
+  const file_progress_interval = setInterval(async () => {
+    const isActive = await job.isActive();
+    if (!isActive) {
+      clearInterval(file_progress_interval);
+      requested = false;
+      req.abort();
+      return done();
+    }
+    job.progress({
+      message: `
+*Download Progress*: ${(downloaded_percentage * 100).toFixed(2)}% 
+        
+*Downloaded*: ${filesize(downloaded_size)} of ${filesize(total_size)}
+        
+*Download Speed*: ${filesize(download_speed)}/s
+        
+*ETA*: ${eta}s`,
+      message_id,
+      chat_id,
+    });
+  }, 2000)
   progress(req)
-    .on("progress", async function (state) {
-      // Check whether if job is still active;
-      // You can abort request process before it's completed
-      const isActive = await job.isActive();
-      if (!isActive) {
-        requested = false;
-        req.abort();
-        return done();
-      }
-      job.progress({
-        message: `
-*Download Progress*: ${(state.percent * 100).toFixed(2)}% 
-          
-*Downloaded*: ${filesize(state.size.transferred)} of ${filesize(state.size.total)}
-          
-*Download Speed*: ${filesize(state.speed)}/s
-          
-*ETA*: ${state.time.remaining}s`,
-        message_id,
-        chat_id,
-      });
+    .on("progress", function (state) { 
+      downloaded_percentage = state.percent;
+      downloaded_size = state.size.transferred;
+      total_size = state.size.total;
+      download_speed = state.speed;
+      eta = state.time.remaining;
     })
     .on("error", function (err) {
       console.log(err, "Something went wrong!");
+      req.abort();
       done(new Error(err));
     })
     .on("end", async () => {
+      clearInterval(file_progress_interval);
       if (requested) {
         job.progress({
           message: `
@@ -954,14 +970,14 @@ Use /auth command to authenticate your account!
       if (!isUrl(url)) {
         return bot.sendMessage(chatId, "Invalid url, please try again!");
       }
-      const stream = got.stream(url);
       const res = await got.head(url);
       console.log(res.headers);
-      const filetype = (await fileType.fromStream(stream)) || {
+      const filetype = {
         ext: mime.extension(res.headers["content-type"]),
         mime: res.headers["content-type"],
       };
       const fileSize = res.headers["content-length"];
+      if (!fileSize) return bot.sendMessage(chatId, "File is not available, please try other url!")
       const limit = 107374182400;
       if (fileSize <= limit) {
         const filename =

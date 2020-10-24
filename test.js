@@ -265,10 +265,15 @@
 //   );
 // });
 
-const DHT = require('bittorrent-dht')
-const magnet = require('magnet-uri')
+// const DHT = require('bittorrent-dht')
+// const magnet = require('magnet-uri')
  
-const uri = 'magnet:?xt=urn:btih:e3811b9539cacff680e418124272177c47477157'
-const parsed = magnet(uri)
+// const uri = 'magnet:?xt=urn:btih:e3811b9539cacff680e418124272177c47477157'
+// const parsed = magnet(uri)
  
-console.log(parsed.infoHash) // 'e3811b9539cacff680e418124272177c47477157'
+// console.log(parsed.infoHash) // 'e3811b9539cacff680e418124272177c47477157'
+
+// const isURL = require("./src/fixtures/is-url");
+// console.log(isURL('http://denstoredanske.dk/Sprog,_religion_og_filosofi/Filosofi/Logik/syllogisme'));
+const mime = require("mime-types");
+console.log(mime.extension("application/vnd.android.package-archive"));
