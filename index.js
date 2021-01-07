@@ -605,7 +605,7 @@ function checkFolderOrFileExists(auth, folder_or_file_id) {
   });
 }
 
-function sendListFiles(auth, chat, fileId = "root", isEdit = false) {
+function sendFileLists(auth, chat, fileId = "root", isEdit = false) {
   const drive = google.drive({ version: "v3", auth });
   drive.files.list(
     {
@@ -618,10 +618,20 @@ function sendListFiles(auth, chat, fileId = "root", isEdit = false) {
     },
     (err, res) => {
       if (err) return console.log("The API returned an error: " + err);
-      const files = res.data.files;
+      // ID Description
+      // 44 bytes/characters ID = Google Folder
+      // 33 bytes/chracters ID = Google File
+      // 72 bytes/characters ID = Google Classroom Folder (Skipped)
+
+      // Skip all file/folder with id length greater than 44
+      const files = res.data.files.filter(file => {
+        if (file.id.length <= 44) return file
+      })
+
       if (files.length) {
+        // callback_data must be 1-64 bytes/characters (Throw an error if exceeded)
         const reply_markup = JSON.stringify({
-          inline_keyboard:
+          inline_keyboard: 
             fileId !== "root"
               ? [
                   [
@@ -687,10 +697,11 @@ function sendListFiles(auth, chat, fileId = "root", isEdit = false) {
               message_id: chat.message_id,
               chat_id: chat.id,
               reply_markup,
-            })
+            }).catch(e => console.log(e))
           : bot.sendMessage(chat.id, "Choose your file/folder to manage!", {
               reply_markup,
-            });
+            }).catch(e => console.log(e));
+            // JSON.parse(reply_markup).inline_keyboard.forEach(markup => console.log(markup));
       } else {
         console.log("No files found.");
         fileId === "root"
@@ -922,13 +933,17 @@ Use /auth command to authenticate your account!
             chatId,
             "Invalid token, please try again! To cancel this action please click the cancel button!"
           );
-        } else {
+        } else { 
           oAuth2Client.setCredentials(token);
+          const userInfo = await showUserInfo(oAuth2Client);
+          const isUserExists = user.tokens.find(token => token.ownership === userInfo.emailAddress);
+          if (isUserExists) {
+            return bot.sendMessage(chatId, "That email was already logged in! You should try different account");
+          }
           // Store the token to disk for later program executions
-          await User.findOneAndUpdate(
-            { telegram_user_id: user_id },
-            { $push: { tokens: token } }
-          );
+          user.tokens.push({ ...token, ownership: userInfo.emailAddress });
+          user.selected_credentials_index = user.tokens.length - 1;
+          await user.save();
           bot.sendMessage(chatId, "Authorized successfully");
           users[user_id] = {
             ...users[user_id],
@@ -960,6 +975,15 @@ Use /auth command to authenticate your account!
       delete users[user_id].choosen_parent_folder;
       delete users[user_id].last_message_id;
     } else if (msg.text.includes("/upload")) {
+      const folderExists = await checkFolderOrFileExists(
+        oAuth2Client,
+        users[chatId].current_folder_id
+      );
+      if (!folderExists)
+        return bot.sendMessage(
+          chatId,
+          "Folder not found in this account. Please select an existing folder to upload or switch between your google drive account"
+        );
       if (!user.tokens.length) {
         return bot.sendMessage(
           chatId,
@@ -1046,7 +1070,7 @@ To Authorize your google account follow step by step below:
 1. Click 'Authorize' button and visit the link
 2. Choose whichever account do you want to use
 3. Allow all permissions to this bot
-4. Copy the verification code and send it to me
+4. Copy the verification code and send it here
           `,
         reply_markup: JSON.stringify({
           inline_keyboard: [
@@ -1069,6 +1093,10 @@ To Authorize your google account follow step by step below:
         onAuth: true,
       };
     } else if (msg.text.toLowerCase() === "/myfiles") {
+      if (!user.tokens[selected_credentials_index]) {
+        return bot.sendMessage(chatId, "No account selected! enter /mydrive for more details"); 
+      }
+
       if (!user.tokens.length) {
         return bot.sendMessage(
           chatId,
@@ -1076,7 +1104,7 @@ To Authorize your google account follow step by step below:
         );
       }
       oAuth2Client.setCredentials(user.tokens[selected_credentials_index]);
-      sendListFiles(oAuth2Client, { id: user_id });
+      sendFileLists(oAuth2Client, { id: user_id });
     } else if (msg.text.toLowerCase() === "/mydrive") {
       if (!user.tokens.length)
         return bot.sendMessage(
@@ -1247,7 +1275,7 @@ For example:  ` +
     );
   } else if (action === "folder") {
     oAuth2Client.setCredentials(users[id].credentials);
-    sendListFiles(oAuth2Client, chat, data, true);
+    sendFileLists(oAuth2Client, chat, data, true);
   } else if (action === "file") {
     bot.editMessageText("What do you want to do with this file ?", {
       reply_markup: JSON.stringify({
@@ -1567,7 +1595,10 @@ There're currently ${waitingJobsCount} file(s) are waiting to be uploaded
         });
       }
     );
+  } else if (!users[id].credentials) {
+    return bot.sendMessage(chat.id, "No account selected! enter /mydrive for more details");
   }
+
 });
 
 // Debugging
