@@ -598,7 +598,10 @@ function checkFolderOrFileExists(auth, folder_or_file_id) {
         spaces: "drive",
       },
       (err, res) => {
-        if (err) return resolve(false);
+        if (err) {
+          console.log(err);
+          return resolve(false);
+        }
         return resolve(true);
       }
     );
@@ -975,10 +978,16 @@ Use /auth command to authenticate your account!
       delete users[user_id].choosen_parent_folder;
       delete users[user_id].last_message_id;
     } else if (msg.text.includes("/upload")) {
+      if (!user.tokens[selected_credentials_index]) {
+        return bot.sendMessage(chatId, "No account selected! enter /mydrive for more details");
+      }
+
+      oAuth2Client.setCredentials(user.tokens[selected_credentials_index]);
       const folderExists = await checkFolderOrFileExists(
         oAuth2Client,
-        users[chatId].current_folder_id
+        users[user_id].current_folder_id
       );
+
       if (!folderExists)
         return bot.sendMessage(
           chatId,
@@ -995,7 +1004,7 @@ Use /auth command to authenticate your account!
         return bot.sendMessage(chatId, "Invalid url, please try again!");
       }
       const res = await got.head(url);
-      console.log(res.headers);
+      // console.log(res.headers);
       const filetype = {
         ext: mime.extension(res.headers["content-type"]),
         mime: res.headers["content-type"],
