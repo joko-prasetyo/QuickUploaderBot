@@ -13,10 +13,7 @@ const User = require("./src/models/user");
 const parseTorrent = require("parse-torrent");
 const request = require("request");
 const progress = require("request-progress");
-// const progress_stream = require("progress-stream");
-// const path = require("path");
 const got = require("got");
-const fileType = require("file-type");
 const WebTorrent = require("webtorrent");
 const { OAuth2Client } = require("google-auth-library");
 const shortUrl = require("node-url-shortener");
@@ -25,8 +22,7 @@ const isDirectory = require("is-directory");
 const rimraf = require("rimraf");
 const mkdirp = require("mkdirp");
 const { v4: uuidv4 } = require("uuid");
-const { chat } = require("googleapis/build/src/apis/chat");
-// const mkdirp = require("mkdirp");
+
 const dir = "./shared";
 const torrent_downloaded_files_dir = "./torrents";
 
@@ -620,7 +616,10 @@ function sendFileLists(auth, chat, fileId = "root", isEdit = false) {
       spaces: "drive",
     },
     (err, res) => {
-      if (err) return console.log("The API returned an error: " + err);
+      if (err) {
+        console.log("The API returned an error: " + err);
+        return bot.sendMessage(chat.id, `Cannot login to your current account, please relogin your account (/revoke to logout)`);
+      }
       // ID Description
       // 44 bytes/characters ID = Google Folder
       // 33 bytes/chracters ID = Google File
@@ -1122,12 +1121,13 @@ To Authorize your google account follow step by step below:
         );
       let accounts = [];
       let account_index = 0;
+      // Validate tokens
       for (const token of user.tokens) {
         oAuth2Client.setCredentials(token);
         const info = await showUserInfo(oAuth2Client);
         accounts.push([
           {
-            text: `${info.emailAddress} ${
+            text: `${info ? info.emailAddress : `${token.ownership} (Revoke Required)`} ${
               selected_credentials_index === account_index ? "✅" : ""
             }`,
             callback_data: `${account_index} choose-drive`,
@@ -1162,7 +1162,20 @@ Referral      : 0
     } else if (msg.text.toLowerCase() === "/upgrade") {
       bot.sendMessage(chatId, "Coming soon!");
     } else if (msg.text.toLowerCase() === "/revoke") {
-      bot.sendMessage(chatId, "Select Google Drive account to be removed");
+      if (!user.tokens.length) return bot.sendMessage(chatId, "There's no account to revoke!");
+      bot.sendMessage(chatId, "Select Google Drive account to be removed", {
+        reply_markup: JSON.stringify({
+          inline_keyboard: [
+            user.tokens.map(token => { 
+              return {
+                text: token.ownership,
+                callback_data: `${token.ownership} revoke`
+              }
+            }),
+            [{ text: "❌ Close", callback_data: " cancel" }],
+          ],
+        }),
+      });
     } else if (msg.text.toLowerCase() === "/revokeall") {
       if (!user.tokens.length)
         return bot.sendMessage(
@@ -1174,7 +1187,7 @@ Referral      : 0
         `
 Are you sure ?   
 
-This action will remove all of your google accounts accessibility to our bot
+This action will remove all of your google accounts accessibility to this bot
 `,
         {
           reply_markup: JSON.stringify({
@@ -1468,6 +1481,19 @@ You can always bind your account to our bot by using /auth
       }
     );
     users[id].credentials = null;
+  } else if (action === "revoke") {
+    await User.updateOne({ telegram_user_id: id }, {
+      $pull: {
+        tokens: {
+          ownership: data
+        }
+      }
+    }).catch(e => console.log(e));
+    bot.editMessageText("Account removed!", {
+      message_id,
+      chat_id: id
+    });
+
   } else if (action === "cancel-file-upload") {
     try {
       const current_active_job = await uploadFileQueue.getJob(data);
