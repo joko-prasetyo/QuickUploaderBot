@@ -11,7 +11,7 @@
     "redis-server": "C:/Redis/redis-server.exe"
   },
   "keywords": [],
-  "author": "",
+  "author": "jokoprasetyo.user@gmail.com",
   "license": "ISC",
   "dependencies": {
     "bittorrent-tracker": "^9.15.0",
